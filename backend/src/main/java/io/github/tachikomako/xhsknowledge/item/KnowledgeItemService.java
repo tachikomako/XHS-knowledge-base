@@ -42,6 +42,7 @@ public class KnowledgeItemService {
     public PageResponse<KnowledgeItemView> search(
             String query,
             String categoryId,
+            String tagId,
             String sourceType,
             String captureLevel,
             String lifecycleStatus,
@@ -64,6 +65,13 @@ public class KnowledgeItemService {
         wrapper.eq(KnowledgeItemEntity::getLifecycleStatus,
                 StringUtils.hasText(lifecycleStatus) ? lifecycleStatus : "ACTIVE");
         wrapper.eq(StringUtils.hasText(categoryId), KnowledgeItemEntity::getCategoryId, categoryId);
+        if (StringUtils.hasText(tagId)) {
+            if (tagId.length() > 128) throw badRequest("INVALID_FILTER", "tagId is too long");
+            wrapper.apply(
+                    "EXISTS (SELECT 1 FROM knowledge_item_tags kit WHERE kit.item_id = knowledge_items.id AND kit.tag_id = {0})",
+                    tagId
+            );
+        }
         wrapper.eq(StringUtils.hasText(sourceType), KnowledgeItemEntity::getSourceType, sourceType);
         wrapper.eq(StringUtils.hasText(captureLevel), KnowledgeItemEntity::getCaptureLevel, captureLevel);
         wrapper.eq(StringUtils.hasText(aiStatus), KnowledgeItemEntity::getAiStatus, aiStatus);

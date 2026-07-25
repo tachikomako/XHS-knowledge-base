@@ -11,10 +11,17 @@ describe('knowledge item API', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    await searchItems({ q: '  Agent  ', lifecycleStatus: 'ARCHIVED', captureLevel: '', page: 2 })
+    await searchItems({
+      q: '  Agent  ',
+      categoryId: 'category-1',
+      tagId: 'tag-1',
+      lifecycleStatus: 'ARCHIVED',
+      captureLevel: '',
+      page: 2,
+    })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/items?q=Agent&lifecycleStatus=ARCHIVED&page=2&pageSize=12&sort=updatedAt%2Cdesc',
+      '/api/v1/items?q=Agent&categoryId=category-1&tagId=tag-1&lifecycleStatus=ARCHIVED&page=2&pageSize=12&sort=updatedAt%2Cdesc',
       expect.objectContaining({ signal: undefined }),
     )
   })

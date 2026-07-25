@@ -2,8 +2,15 @@
 import { Calendar, Document, Picture } from '@element-plus/icons-vue'
 import type { KnowledgeItem } from '../api/items'
 
-defineProps<{ item: KnowledgeItem }>()
-defineEmits<{ open: [item: KnowledgeItem] }>()
+defineProps<{
+  item: KnowledgeItem
+  categoryName: string | null
+  tagNames: Record<string, string>
+}>()
+defineEmits<{
+  open: [item: KnowledgeItem]
+  filterTag: [tagId: string]
+}>()
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' }).format(new Date(value))
@@ -26,8 +33,13 @@ function formatDate(value: string) {
       </div>
       <h2>{{ item.title }}</h2>
       <p>{{ item.summary || item.content || '尚未保存正文摘要。打开详情可前往原帖。' }}</p>
+      <div v-if="item.tagIds.length" class="card-tags">
+        <button v-for="tagId in item.tagIds.slice(0, 4)" :key="tagId" type="button" @click.stop="$emit('filterTag', tagId)">
+          #{{ tagNames[tagId] || '未知标签' }}
+        </button>
+      </div>
       <div class="card-footer">
-        <span>{{ item.captureLevel === 'DETAIL' ? '正文快照' : '链接卡片' }}</span>
+        <span>{{ categoryName || (item.captureLevel === 'DETAIL' ? '正文快照' : '链接卡片') }}</span>
         <span v-if="item.userNote" class="has-note">有笔记</span>
       </div>
     </div>

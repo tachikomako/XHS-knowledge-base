@@ -87,6 +87,8 @@ button, input, textarea { font: inherit; }
 .total-counter span { margin-top: 5px; color: #817a70; font-size: 12px; }
 
 .toolbar {
+  align-items: stretch;
+  flex-direction: column;
   justify-content: space-between;
   gap: 24px;
   padding: 18px;
@@ -95,8 +97,8 @@ button, input, textarea { font: inherit; }
   background: rgba(255, 253, 248, .8);
   box-shadow: 0 12px 40px rgba(71, 64, 53, .06);
 }
-.search-form { display: flex; width: min(520px, 100%); gap: 10px; }
-.filter-row { gap: 10px; }
+.search-form { display: flex; width: min(680px, 100%); gap: 10px; }
+.filter-row { flex-wrap: wrap; gap: 10px; }
 .page-shell > .el-alert { margin-top: 18px; }
 
 .library-grid {
@@ -133,6 +135,9 @@ button, input, textarea { font: inherit; }
 .card-meta span:last-child { display: flex; align-items: center; gap: 4px; }
 .card-body h2 { min-height: 50px; margin: 11px 0 8px; overflow: hidden; font-size: 17px; line-height: 1.45; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .card-body > p { min-height: 61px; margin: 0; overflow: hidden; color: #6f685f; font-size: 13px; line-height: 1.6; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.card-tags { display: flex; min-height: 24px; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
+.card-tags button { padding: 4px 7px; border: 0; border-radius: 999px; color: #5f7452; background: #e9efe5; cursor: pointer; font-size: 10px; }
+.card-tags button:hover { background: #dce7d6; }
 .card-footer { margin-top: 17px; padding-top: 13px; border-top: 1px solid #ede8df; }
 .has-note { color: #657858; font-weight: 700; }
 .pagination { justify-content: center; margin-top: 32px; }
@@ -152,11 +157,28 @@ button, input, textarea { font: inherit; }
 .source-link { display: inline-flex; align-items: center; gap: 6px; color: #5f7452; font-size: 13px; font-weight: 700; text-decoration: none; }
 .editor-section { display: grid; gap: 16px; }
 .editor-section label { display: grid; gap: 7px; color: #5d574f; font-size: 12px; font-weight: 700; }
+.metadata-fields { display: grid; grid-template-columns: 1fr 1.35fr; gap: 12px; }
 .editor-section > .el-button { justify-self: start; }
 .detail-actions { gap: 10px; margin-top: 28px; padding-top: 22px; border-top: 1px solid #e5dfd5; }
 
+.taxonomy-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; min-height: 330px; }
+.taxonomy-section + .taxonomy-section { padding-left: 30px; border-left: 1px solid #e5dfd5; }
+.taxonomy-heading h3 { margin: 0; font-size: 18px; }
+.taxonomy-heading p { margin: 5px 0 0; color: #817a70; font-size: 12px; }
+.taxonomy-create { display: flex; gap: 8px; margin: 18px 0; }
+.taxonomy-list { display: grid; max-height: 310px; overflow-y: auto; }
+.taxonomy-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eee9e0; }
+.taxonomy-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.taxonomy-row small { margin-left: 7px; color: #918a80; }
+.taxonomy-row > div { display: flex; }
+.tag-manager-list { display: flex; max-height: 310px; flex-wrap: wrap; align-content: flex-start; gap: 7px; overflow-y: auto; }
+.tag-manager-chip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 7px 6px 10px; border-radius: 999px; color: #55674b; background: #e8eee4; font-size: 12px; }
+.tag-manager-chip small { color: #84907d; }
+.tag-manager-chip button { display: grid; width: 18px; height: 18px; padding: 3px; place-items: center; border: 0; border-radius: 50%; color: #718068; background: transparent; cursor: pointer; }
+.tag-manager-chip button:hover { color: #a84c3d; background: rgba(255, 255, 255, .7); }
+.tag-manager-chip svg { width: 12px; height: 12px; }
+
 @media (max-width: 980px) {
-  .toolbar { align-items: stretch; flex-direction: column; }
   .search-form { width: 100%; }
   .filter-row { justify-content: space-between; }
   .library-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -177,4 +199,8 @@ button, input, textarea { font: inherit; }
   .library-grid { grid-template-columns: 1fr; }
   .card-cover { height: 220px; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .metadata-fields, .taxonomy-layout { grid-template-columns: 1fr; }
+  .taxonomy-section + .taxonomy-section { padding: 24px 0 0; border-top: 1px solid #e5dfd5; border-left: 0; }
+  .category-create { flex-wrap: wrap; }
+  .category-create .el-input { flex: 1 1 180px; }
 }
