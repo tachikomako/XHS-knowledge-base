@@ -1,0 +1,31 @@
+# IDE and OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Secrets and local configuration
+.env
+.env.local
+*.local.yml
+*.local.yaml
+
+# Backend
+backend/target/
+backend/data/
+backend/*.db
+backend/*.db-*
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+
+# Logs
+*.log
+logs/
+
+# Extension packages
+extension/*.zip
+extension/*.crx

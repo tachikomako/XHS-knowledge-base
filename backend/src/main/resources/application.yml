@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: xhs-knowledge-backend
+  datasource:
+    url: jdbc:sqlite:${XHS_DB_PATH:./data/xhs-knowledge.db}
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 1
+      connection-init-sql: PRAGMA foreign_keys=ON
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+server:
+  address: ${XHS_SERVER_ADDRESS:127.0.0.1}
+  port: ${XHS_SERVER_PORT:8080}
+
+app:
+  version: 0.1.0-SNAPSHOT
+
+qwen:
+  api-key: ${QWEN_API_KEY:}
+
+xhs:
+  extension-token: ${XHS_EXTENSION_TOKEN:dev-local-token}
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+
+logging:
+  level:
+    root: INFO

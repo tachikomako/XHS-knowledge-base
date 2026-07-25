@@ -1,0 +1,147 @@
+:root {
+  color: #25221e;
+  background: #f5f2eb;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 360px;
+  margin: 0;
+}
+
+main {
+  padding: 22px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.brand-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 13px;
+  color: white;
+  background: #718363;
+  font-family: Georgia, serif;
+  font-size: 20px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 16px;
+}
+
+header p,
+.status-card p {
+  margin: 3px 0 0;
+  color: #777067;
+  font-size: 12px;
+}
+
+.status-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #eae5dc;
+}
+
+.status-card.online {
+  background: #e0e9da;
+}
+
+.status-card.error {
+  background: #f1ddd8;
+}
+
+.status-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #9a938a;
+}
+
+.online .status-dot {
+  background: #5f7b51;
+}
+
+.error .status-dot {
+  background: #b25242;
+}
+
+form {
+  display: grid;
+  gap: 13px;
+  margin-top: 18px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  color: #5f5951;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+input {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid #d4cec3;
+  border-radius: 9px;
+  outline: none;
+  background: #fffdf8;
+  font: inherit;
+  font-weight: 400;
+}
+
+input:focus {
+  border-color: #718363;
+  box-shadow: 0 0 0 3px rgba(113, 131, 99, 0.12);
+}
+
+button {
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.primary {
+  color: white;
+  background: #25221e;
+}
+
+.secondary {
+  margin-top: 10px;
+  color: #3e4c35;
+  background: #dfe7d8;
+}
+
+.privacy-note {
+  margin: 16px 0 0;
+  color: #817a71;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
