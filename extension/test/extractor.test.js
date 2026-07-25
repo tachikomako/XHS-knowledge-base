@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { parseHTML } from 'linkedom'
 
-import { detectPage, ExtractionError, extractCurrentPost } from '../content/extractor-core.js'
+import { detectPage, ExtractionError, extractCurrentPost, extractFavoritesPage } from '../content/extractor-core.js'
 
 const fixtureRoot = new URL('./fixtures/', import.meta.url)
 
@@ -17,7 +17,7 @@ test('extracts a visible current post into the backend contract', async () => {
   )
 
   assert.equal(result.pageType, 'CURRENT_POST')
-  assert.equal(result.extractorVersion, 'xhs-dom-1')
+  assert.equal(result.extractorVersion, 'xhs-dom-2')
   assert.deepEqual(result.warnings, [])
   assert.deepEqual(result.item, {
     sourceItemId: 'fixture-post-001',
@@ -51,12 +51,43 @@ test('rejects unrelated pages without extracting arbitrary content', () => {
   const document = parseHTML('<html><head><title>普通页面</title></head><body></body></html>').document
   assert.deepEqual(detectPage('https://www.xiaohongshu.com/user/profile/example', document), {
     pageType: 'UNSUPPORTED',
-    reason: '当前不是可识别的小红书帖子页',
+    reason: '请打开小红书帖子或“我的收藏”页面',
   })
   assert.throws(
     () => extractCurrentPost(document, 'https://www.xiaohongshu.com/user/profile/example'),
     (error) => error instanceof ExtractionError && error.code === 'UNSUPPORTED_PAGE',
   )
+})
+
+test('extracts and deduplicates loaded cards from the favorites page', async () => {
+  const document = await loadFixture('favorites-page.html')
+  const result = extractFavoritesPage(
+    document,
+    'https://www.xiaohongshu.com/user/profile/fixture-user?tab=fav',
+    new Date('2026-07-25T05:00:00.000Z'),
+  )
+
+  assert.equal(result.pageType, 'FAVORITES_PAGE')
+  assert.equal(result.extractorVersion, 'xhs-dom-2')
+  assert.deepEqual(result.stats, { candidates: 4, extracted: 2, skipped: 1, duplicates: 1 })
+  assert.deepEqual(result.warnings, ['1 个卡片缺少标题或帖子链接，已跳过', '1 个重复卡片已合并'])
+  assert.deepEqual(result.items.map((item) => ({
+    sourceItemId: item.sourceItemId,
+    title: item.title,
+    author: item.author,
+    captureLevel: item.captureLevel,
+  })), [
+    { sourceItemId: 'favorite-001', title: 'Java Agent 入门资料', author: '示例作者甲', captureLevel: 'CARD' },
+    { sourceItemId: 'favorite-002', title: '英语听力练习方法', author: '示例作者乙', captureLevel: 'CARD' },
+  ])
+  assert.equal(result.items[0].capturedAt, '2026-07-25T05:00:00.000Z')
+})
+
+test('detects an active favorites tab even when the URL has no tab query', async () => {
+  const document = await loadFixture('favorites-page.html')
+  assert.deepEqual(detectPage('https://www.xiaohongshu.com/user/profile/fixture-user', document), {
+    pageType: 'FAVORITES_PAGE',
+  })
 })
 
 async function loadFixture(name) {
