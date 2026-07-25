@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>小红书个人知识库</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand-mark">知</div>
+        <div>
+          <h1>小红书个人知识库</h1>
+          <p>本地连接设置</p>
+        </div>
+      </header>
+
+      <section class="status-card" id="statusCard" aria-live="polite">
+        <span class="status-dot"></span>
+        <div>
+          <strong id="statusTitle">尚未检查连接</strong>
+          <p id="statusDetail">请先启动本地后端</p>
+        </div>
+      </section>
+
+      <form id="settingsForm">
+        <label>
+          后端地址
+          <input id="backendUrl" name="backendUrl" type="url" required />
+        </label>
+        <label>
+          知识库地址
+          <input id="knowledgeBaseUrl" name="knowledgeBaseUrl" type="url" required />
+        </label>
+        <label>
+          本地访问令牌
+          <input
+            id="extensionToken"
+            name="extensionToken"
+            type="password"
+            autocomplete="off"
+            placeholder="M1 启用后填写"
+          />
+        </label>
+        <button type="submit" class="primary">保存并检查连接</button>
+      </form>
+
+      <button type="button" class="secondary" id="openKnowledgeBase">打开知识库</button>
+      <p class="privacy-note">扩展不会读取或上传 Cookie、密码和验证码。</p>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

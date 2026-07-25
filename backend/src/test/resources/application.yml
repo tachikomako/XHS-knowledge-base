@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: xhs-knowledge-backend-test
+  datasource:
+    url: jdbc:sqlite:target/test-xhs-knowledge.db
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 1
+      connection-init-sql: PRAGMA foreign_keys=ON
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+xhs:
+  extension-token: test-extension-token
+
+app:
+  version: 0.1.0-SNAPSHOT
+
+qwen:
+  api-key: ""
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
