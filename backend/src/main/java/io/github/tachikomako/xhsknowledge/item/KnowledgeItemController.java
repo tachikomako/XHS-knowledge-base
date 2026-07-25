@@ -23,6 +23,7 @@ public class KnowledgeItemController {
     public PageResponse<KnowledgeItemView> search(
             @RequestParam(required = false, name = "q") String query,
             @RequestParam(required = false) String categoryId,
+            @RequestParam(required = false) String tagId,
             @RequestParam(required = false) String sourceType,
             @RequestParam(required = false) String captureLevel,
             @RequestParam(required = false) String lifecycleStatus,
@@ -34,6 +35,7 @@ public class KnowledgeItemController {
         return itemService.search(
                 query,
                 categoryId,
+                tagId,
                 sourceType,
                 captureLevel,
                 lifecycleStatus,

@@ -35,4 +35,5 @@ The persisted model uses `sourceType`, `sourceItemId`, and `canonicalUrl`. Only 
 - M1: SQLite storage, token-protected idempotent import, item query/update/lifecycle APIs.
 - M2: user-triggered current-post preview and clipping with sanitized DOM fixture tests.
 - M3: knowledge-base search, detail view, manual notes, archive, trash, and restore UI.
-- Next: category/tag management followed by favorites-page card indexing.
+- M4: user-managed two-level categories, cross-category tags, item assignment, and taxonomy filters.
+- Next: favorites-page card indexing followed by optional AI metadata suggestions.

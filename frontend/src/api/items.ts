@@ -37,6 +37,8 @@ export interface PageResponse<T> {
 
 export interface ItemSearchParams {
   q?: string
+  categoryId?: string
+  tagId?: string
   lifecycleStatus?: LifecycleStatus
   captureLevel?: CaptureLevel | ''
   page?: number
@@ -47,6 +49,8 @@ export interface ItemSearchParams {
 export interface UpdateKnowledgeItem {
   summary?: string | null
   userNote?: string | null
+  categoryId?: string | null
+  tagIds?: string[]
 }
 
 export async function searchItems(
@@ -55,6 +59,8 @@ export async function searchItems(
 ): Promise<PageResponse<KnowledgeItem>> {
   const query = new URLSearchParams()
   appendIfPresent(query, 'q', params.q?.trim())
+  appendIfPresent(query, 'categoryId', params.categoryId)
+  appendIfPresent(query, 'tagId', params.tagId)
   appendIfPresent(query, 'lifecycleStatus', params.lifecycleStatus)
   appendIfPresent(query, 'captureLevel', params.captureLevel)
   appendIfPresent(query, 'page', params.page ?? 1)

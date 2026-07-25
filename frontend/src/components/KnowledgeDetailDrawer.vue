@@ -2,25 +2,37 @@
 import { computed, ref, watch } from 'vue'
 import { Delete, Link, RefreshLeft, Upload } from '@element-plus/icons-vue'
 import type { KnowledgeItem } from '../api/items'
+import type { Category, Tag } from '../api/metadata'
 
 const props = defineProps<{
   modelValue: boolean
   item: KnowledgeItem | null
   loading: boolean
   saving: boolean
+  categories: Category[]
+  tags: Tag[]
 }>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  save: [changes: { summary: string | null; userNote: string | null }]
+  save: [changes: {
+    summary: string | null
+    userNote: string | null
+    categoryId: string | null
+    tagIds: string[]
+  }]
   lifecycle: [action: 'archive' | 'trash' | 'restore']
 }>()
 
 const summary = ref('')
 const userNote = ref('')
+const categoryId = ref<string | null>(null)
+const tagIds = ref<string[]>([])
 
 watch(() => props.item, (item) => {
   summary.value = item?.summary || ''
   userNote.value = item?.userNote || ''
+  categoryId.value = item?.categoryId || null
+  tagIds.value = item?.tagIds ? [...item.tagIds] : []
 }, { immediate: true })
 
 const drawerVisible = computed({
@@ -32,6 +44,8 @@ function save() {
   emit('save', {
     summary: summary.value.trim() || null,
     userNote: userNote.value.trim() || null,
+    categoryId: categoryId.value,
+    tagIds: tagIds.value,
   })
 }
 
@@ -78,6 +92,23 @@ function formatDate(value: string | null) {
 
       <section class="detail-section editor-section">
         <div class="section-heading"><h2>知识整理</h2><span>手工内容不会被来源同步覆盖</span></div>
+        <div class="metadata-fields">
+          <label>分类
+            <el-select v-model="categoryId" clearable placeholder="未分类">
+              <el-option
+                v-for="category in categories"
+                :key="category.id"
+                :label="category.parentId ? `　${category.name}` : category.name"
+                :value="category.id"
+              />
+            </el-select>
+          </label>
+          <label>标签
+            <el-select v-model="tagIds" multiple :multiple-limit="20" collapse-tags collapse-tags-tooltip placeholder="选择标签">
+              <el-option v-for="tag in tags" :key="tag.id" :label="`#${tag.name}`" :value="tag.id" />
+            </el-select>
+          </label>
+        </div>
         <label>摘要<el-input v-model="summary" type="textarea" :rows="3" maxlength="2000" show-word-limit /></label>
         <label>我的笔记<el-input v-model="userNote" type="textarea" :rows="6" maxlength="20000" show-word-limit /></label>
         <el-button type="primary" :loading="saving" @click="save">保存整理</el-button>
