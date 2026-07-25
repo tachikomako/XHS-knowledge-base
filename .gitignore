@@ -27,5 +27,6 @@ frontend/coverage/
 logs/
 
 # Extension packages
+extension/node_modules/
 extension/*.zip
 extension/*.crx

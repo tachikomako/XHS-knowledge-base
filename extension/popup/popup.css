@@ -57,6 +57,48 @@ header p,
   background: #eae5dc;
 }
 
+.capture-card {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid #ddd6ca;
+  border-radius: 14px;
+  background: #fffdf8;
+}
+
+.eyebrow {
+  color: #718363;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+h2 {
+  margin: 7px 0 0;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.capture-card > p {
+  margin: 5px 0 12px;
+  color: #777067;
+  font-size: 11px;
+}
+
+#captureWarnings {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  color: #9b652d;
+  font-size: 11px;
+}
+
+.capture-result.success {
+  color: #527047;
+}
+
+.capture-result.error {
+  color: #a5483a;
+}
+
 .status-card.online {
   background: #e0e9da;
 }
@@ -132,6 +174,11 @@ button:disabled {
   background: #25221e;
 }
 
+.settings-button {
+  color: #3e4c35;
+  background: #dfe7d8;
+}
+
 .secondary {
   margin-top: 10px;
   color: #3e4c35;
@@ -144,4 +191,17 @@ button:disabled {
   font-size: 11px;
   line-height: 1.5;
   text-align: center;
+}
+
+details {
+  margin-top: 14px;
+  border-top: 1px solid #ddd6ca;
+  color: #5f5951;
+  font-size: 12px;
+}
+
+summary {
+  padding-top: 13px;
+  cursor: pointer;
+  font-weight: 700;
 }
