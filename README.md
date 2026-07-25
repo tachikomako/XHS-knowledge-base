@@ -8,12 +8,12 @@
 
 - Spring Boot 健康检查 API
 - Vue 3 + Element Plus 独立网站骨架
-- Chrome Manifest V3 扩展骨架，可检查后端连接并打开知识库
+- Chrome Manifest V3 扩展，可预览并剪藏当前打开的小红书帖子
 - SQLite 本地持久化和数据库自动初始化
 - 令牌保护的小红书批量导入、幂等去重和 CARD→DETAIL 升级
 - 条目分页查询、手工摘要/笔记、归档、回收站和恢复 API
 
-下一步：当前帖子 DOM 剪藏、收藏页批量索引、知识库管理页面和可选 Qwen 自动整理。
+下一步：收藏页批量索引、知识库管理页面和可选 Qwen 自动整理。
 
 ## 技术栈
 
@@ -54,8 +54,8 @@ npm run dev
 1. 打开 `chrome://extensions`。
 2. 开启“开发者模式”。
 3. 点击“加载已解压的扩展程序”，选择仓库中的 `extension` 目录。
-4. 点击扩展图标，保存后端地址和知识库地址。
-5. 点击“检查连接”。
+4. 点击扩展图标，在“连接设置”中填写地址和与后端一致的访问令牌。
+5. 打开或刷新一篇小红书帖子，再打开扩展查看预览并点击“剪藏当前帖子”。
 
 扩展仅申请访问小红书和本地后端所需权限，不读取或上传 Cookie。
 
@@ -66,7 +66,7 @@ backend/    Spring Boot API
 frontend/   Vue 独立网站
 extension/  Chrome Manifest V3 扩展
 docs/       架构和开发说明
-fixtures/   脱敏 DOM 测试样本（后续加入）
+extension/test/fixtures/  脱敏 DOM 测试样本
 ```
 
 接口说明见 [docs/api.md](docs/api.md)，架构边界见 [docs/architecture.md](docs/architecture.md)。运行全部验证：

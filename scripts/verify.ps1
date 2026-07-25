@@ -22,10 +22,21 @@ try {
 }
 
 Get-ChildItem -LiteralPath (Join-Path $repoRoot 'extension') -Recurse -Filter '*.js' |
+    Where-Object { $_.FullName -notlike '*\node_modules\*' } |
     ForEach-Object {
         node --check $_.FullName
         if ($LASTEXITCODE -ne 0) { throw "Extension syntax check failed: $($_.FullName)" }
     }
+
+Push-Location (Join-Path $repoRoot 'extension')
+try {
+    npm run test
+    if ($LASTEXITCODE -ne 0) { throw 'Extension tests failed' }
+    npm audit --audit-level=high
+    if ($LASTEXITCODE -ne 0) { throw 'Extension dependency audit failed' }
+} finally {
+    Pop-Location
+}
 
 Get-Content -LiteralPath (Join-Path $repoRoot 'extension\manifest.json') -Raw -Encoding UTF8 |
     ConvertFrom-Json |

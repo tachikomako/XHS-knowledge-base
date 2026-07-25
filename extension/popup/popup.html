@@ -12,7 +12,7 @@
         <div class="brand-mark">知</div>
         <div>
           <h1>小红书个人知识库</h1>
-          <p>本地连接设置</p>
+          <p>把当前帖子保存到本地</p>
         </div>
       </header>
 
@@ -24,29 +24,41 @@
         </div>
       </section>
 
-      <form id="settingsForm">
-        <label>
-          后端地址
-          <input id="backendUrl" name="backendUrl" type="url" required />
-        </label>
-        <label>
-          知识库地址
-          <input id="knowledgeBaseUrl" name="knowledgeBaseUrl" type="url" required />
-        </label>
-        <label>
-          本地访问令牌
-          <input
-            id="extensionToken"
-            name="extensionToken"
-            type="password"
-            autocomplete="off"
-            placeholder="M1 启用后填写"
-          />
-        </label>
-        <button type="submit" class="primary">保存并检查连接</button>
-      </form>
+      <section class="capture-card" id="captureCard" aria-live="polite">
+        <span class="eyebrow">当前页面</span>
+        <h2 id="captureTitle">正在识别…</h2>
+        <p id="captureMeta">请稍候</p>
+        <ul id="captureWarnings" hidden></ul>
+        <button type="button" class="primary" id="clipCurrentPost" disabled>剪藏当前帖子</button>
+        <p class="capture-result" id="captureResult"></p>
+      </section>
 
       <button type="button" class="secondary" id="openKnowledgeBase">打开知识库</button>
+
+      <details>
+        <summary>连接设置</summary>
+        <form id="settingsForm">
+          <label>
+            后端地址
+            <input id="backendUrl" name="backendUrl" type="url" required />
+          </label>
+          <label>
+            知识库地址
+            <input id="knowledgeBaseUrl" name="knowledgeBaseUrl" type="url" required />
+          </label>
+          <label>
+            本地访问令牌
+            <input
+              id="extensionToken"
+              name="extensionToken"
+              type="password"
+              autocomplete="off"
+              placeholder="例如 dev-local-token"
+            />
+          </label>
+          <button type="submit" class="settings-button">保存并检查连接</button>
+        </form>
+      </details>
       <p class="privacy-note">扩展不会读取或上传 Cookie、密码和验证码。</p>
     </main>
     <script type="module" src="popup.js"></script>
