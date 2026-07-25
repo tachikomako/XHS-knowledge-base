@@ -131,13 +131,65 @@ class ImportFlowIntegrationTest {
                 .andExpect(jsonPath("$.total").value(1));
     }
 
+    @Test
+    void preservesCredentialedSourceUrlWhileDeduplicatingByNoteId() throws Exception {
+        String noteId = "6a65035a000000000e035015";
+        String feedUrl = "https://www.xiaohongshu.com/explore/" + noteId
+                + "?xsec_token=feed-token-placeholder&xsec_source=pc_feed";
+        String bareUrl = "https://www.xiaohongshu.com/explore/" + noteId;
+        String collectUrl = "https://www.xiaohongshu.com/explore/" + noteId
+                + "?xsec_token=collect-token-placeholder&xsec_source=pc_collect";
+
+        String firstBody = mockMvc.perform(post("/api/v1/imports/xiaohongshu")
+                        .header("X-Extension-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(importJson("batch-feed-url", "DETAIL", "detail", feedUrl)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.created").value(1))
+                .andReturn().getResponse().getContentAsString();
+        String itemId = objectMapper.readTree(firstBody).path("results").path(0).path("itemId").asText();
+
+        mockMvc.perform(post("/api/v1/imports/xiaohongshu")
+                        .header("X-Extension-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(importJson("batch-bare-url", "CARD", null, bareUrl)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.skipped").value(1));
+
+        mockMvc.perform(post("/api/v1/imports/xiaohongshu")
+                        .header("X-Extension-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(importJson("batch-collect-url", "CARD", null, collectUrl)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.updated").value(1));
+
+        mockMvc.perform(get("/api/v1/items/{id}", itemId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sourceItemId").value(noteId))
+                .andExpect(jsonPath("$.canonicalUrl").value(bareUrl))
+                .andExpect(jsonPath("$.originalUrl").value(collectUrl));
+
+        mockMvc.perform(get("/api/v1/items"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1));
+    }
+
     private String importJson(String batchId, String captureLevel, String text) throws Exception {
+        return importJson(
+                batchId,
+                captureLevel,
+                text,
+                "https://www.xiaohongshu.com/explore/abc123?xsec_token=test-token-placeholder"
+        );
+    }
+
+    private String importJson(String batchId, String captureLevel, String text, String url) throws Exception {
         var root = objectMapper.createObjectNode();
         root.put("clientBatchId", batchId);
         root.put("captureMode", "DETAIL".equals(captureLevel) ? "CURRENT_POST" : "FAVORITES_PAGE");
         root.put("extractorVersion", "test-1");
         var item = root.putArray("items").addObject();
-        item.put("url", "https://www.xiaohongshu.com/explore/abc123?xsec_token=test-token-placeholder");
+        item.put("url", url);
         item.put("title", "示例收藏");
         item.put("author", "作者");
         if (text == null) {

@@ -18,11 +18,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Service
 public class ImportService {
 
     private static final String SOURCE_TYPE = "XIAOHONGSHU";
+    private static final Pattern XSEC_TOKEN = Pattern.compile("(?:^|&)xsec_token=[^&]+");
+    private static final Pattern XSEC_SOURCE = Pattern.compile("(?:^|&)xsec_source=[^&]+");
 
     private final KnowledgeItemMapper itemMapper;
     private final ImportBatchMapper batchMapper;
@@ -160,7 +163,11 @@ public class ImportService {
         boolean incomingIsDetail = "DETAIL".equals(incoming.captureLevel());
         boolean changed = false;
 
-        changed |= setIfDifferent(existing.getOriginalUrl(), incoming.url().trim(), existing::setOriginalUrl);
+        String incomingUrl = incoming.url().trim();
+        if (shouldReplaceOriginalUrl(existing.getOriginalUrl(), incomingUrl)) {
+            existing.setOriginalUrl(incomingUrl);
+            changed = true;
+        }
         if (!StringUtils.hasText(existing.getSourceItemId()) && source.sourceItemId() != null) {
             existing.setSourceItemId(source.sourceItemId());
             changed = true;
@@ -196,12 +203,31 @@ public class ImportService {
         return changed;
     }
 
-    private boolean setIfDifferent(String current, String next, java.util.function.Consumer<String> setter) {
-        if (!Objects.equals(current, next)) {
-            setter.accept(next);
-            return true;
+    private boolean shouldReplaceOriginalUrl(String current, String candidate) {
+        if (Objects.equals(current, candidate)) {
+            return false;
         }
-        return false;
+        int currentScore = accessUrlScore(current);
+        int candidateScore = accessUrlScore(candidate);
+        return candidateScore > currentScore || (candidateScore == currentScore && candidateScore > 0);
+    }
+
+    private int accessUrlScore(String value) {
+        if (!StringUtils.hasText(value)) {
+            return 0;
+        }
+        try {
+            String query = URI.create(value).getRawQuery();
+            if (query == null) {
+                return 0;
+            }
+            int score = 0;
+            if (XSEC_TOKEN.matcher(query).find()) score += 2;
+            if (XSEC_SOURCE.matcher(query).find()) score += 1;
+            return score;
+        } catch (IllegalArgumentException exception) {
+            return 0;
+        }
     }
 
     private boolean setIfMoreComplete(String current, String candidate, java.util.function.Consumer<String> setter) {
