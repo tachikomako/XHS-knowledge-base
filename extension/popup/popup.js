@@ -15,6 +15,10 @@ const captureTitle = document.querySelector('#captureTitle')
 const captureMeta = document.querySelector('#captureMeta')
 const captureWarnings = document.querySelector('#captureWarnings')
 const captureResult = document.querySelector('#captureResult')
+const rescanButton = document.querySelector('#rescanButton')
+const diagnosticPanel = document.querySelector('#diagnosticPanel')
+const diagnosticText = document.querySelector('#diagnosticText')
+const copyDiagnostics = document.querySelector('#copyDiagnostics')
 
 let currentExtraction = null
 
@@ -54,6 +58,14 @@ captureButton.addEventListener('click', async () => {
   }
 })
 
+rescanButton.addEventListener('click', inspectCurrentPage)
+
+copyDiagnostics.addEventListener('click', () => {
+  diagnosticText.select()
+  const copied = document.execCommand('copy')
+  renderCaptureResult(copied ? '适配诊断已复制' : '请手动复制诊断文本', copied ? 'success' : 'error')
+})
+
 openButton.addEventListener('click', async () => {
   try {
     const { knowledgeBaseUrl } = readFormSettings()
@@ -64,6 +76,12 @@ openButton.addEventListener('click', async () => {
 })
 
 async function inspectCurrentPage() {
+  captureButton.disabled = true
+  rescanButton.disabled = true
+  diagnosticPanel.hidden = true
+  captureTitle.textContent = '正在重新扫描…'
+  captureMeta.textContent = '只读取当前页面已经加载的内容'
+  renderCaptureResult('', '')
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
     if (!tab?.id) throw new Error('无法读取当前标签页')
@@ -92,6 +110,7 @@ async function inspectCurrentPage() {
       captureMeta.textContent = response.items.length
         ? `页面共扫描 ${response.stats.candidates} 个卡片；向下滚动后重新打开插件可加载更多`
         : '请确认已进入“收藏”标签，并先向下滚动加载内容'
+      renderDiagnostics(response.stats)
     } else {
       throw new Error('当前页面类型暂不支持')
     }
@@ -105,7 +124,26 @@ async function inspectCurrentPage() {
     captureMeta.textContent = explainTabError(error)
     renderWarnings([])
     captureButton.disabled = true
+    diagnosticPanel.hidden = true
+  } finally {
+    rescanButton.disabled = false
   }
+}
+
+function renderDiagnostics(stats) {
+  diagnosticText.value = JSON.stringify({
+    extensionVersion: chrome.runtime.getManifest().version,
+    extractorVersion: currentExtraction.extractorVersion,
+    pageType: currentExtraction.captureMode,
+    candidates: stats.candidates,
+    extracted: stats.extracted,
+    skipped: stats.skipped,
+    duplicates: stats.duplicates,
+    knownContainers: stats.knownContainers,
+    postLinks: stats.postLinks,
+    fallbackContainers: stats.fallbackContainers,
+  }, null, 2)
+  diagnosticPanel.hidden = false
 }
 
 function renderImportResult(result) {
