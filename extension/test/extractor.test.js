@@ -69,7 +69,15 @@ test('extracts and deduplicates loaded cards from the favorites page', async () 
 
   assert.equal(result.pageType, 'FAVORITES_PAGE')
   assert.equal(result.extractorVersion, 'xhs-dom-2')
-  assert.deepEqual(result.stats, { candidates: 4, extracted: 2, skipped: 1, duplicates: 1 })
+  assert.deepEqual(result.stats, {
+    candidates: 4,
+    extracted: 2,
+    skipped: 1,
+    duplicates: 1,
+    knownContainers: 5,
+    postLinks: 3,
+    fallbackContainers: 0,
+  })
   assert.deepEqual(result.warnings, ['1 个卡片缺少标题或帖子链接，已跳过', '1 个重复卡片已合并'])
   assert.deepEqual(result.items.map((item) => ({
     sourceItemId: item.sourceItemId,
@@ -88,6 +96,38 @@ test('detects an active favorites tab even when the URL has no tab query', async
   assert.deepEqual(detectPage('https://www.xiaohongshu.com/user/profile/fixture-user', document), {
     pageType: 'FAVORITES_PAGE',
   })
+})
+
+test('infers card boundaries from post links when Xiaohongshu class names change', async () => {
+  const document = await loadFixture('favorites-page-unknown-layout.html')
+  const result = extractFavoritesPage(
+    document,
+    'https://www.xiaohongshu.com/user/profile/fixture-user?tab=fav',
+  )
+
+  assert.equal(result.stats.knownContainers, 0)
+  assert.equal(result.stats.postLinks, 2)
+  assert.equal(result.stats.fallbackContainers, 2)
+  assert.equal(result.stats.extracted, 2)
+  assert.deepEqual(result.items.map((item) => item.title), [
+    '由图片替代文本标题',
+    '由链接属性提供标题',
+  ])
+  assert.equal(result.items[0].author, '回退作者')
+})
+
+test('uses a post link itself when the page has no card wrapper', () => {
+  const document = parseHTML(`
+    <html><body><main>
+      <a href="/explore/direct-001" title="直接链接一"><img /></a>
+      <a href="/explore/direct-002" title="直接链接二"><img /></a>
+    </main></body></html>
+  `).document
+  const result = extractFavoritesPage(
+    document,
+    'https://www.xiaohongshu.com/user/profile/fixture-user?tab=fav',
+  )
+  assert.deepEqual(result.items.map((item) => item.title), ['直接链接一', '直接链接二'])
 })
 
 async function loadFixture(name) {

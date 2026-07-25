@@ -39,8 +39,10 @@ const CARD_TITLE_SELECTORS = [
 ]
 const CARD_AUTHOR_SELECTORS = [
   '[data-testid="note-card-author"]',
+  '[data-user-name]',
   '.author-wrapper .name',
   '.author .name',
+  '[class*="author"] [class*="name"]',
 ]
 
 export class ExtractionError extends Error {
@@ -81,7 +83,8 @@ export function extractFavoritesPage(document, pageUrl, capturedAt = new Date())
     throw new ExtractionError('UNSUPPORTED_PAGE', detection.reason)
   }
 
-  const candidates = collectCardElements(document).filter(isVisible)
+  const collection = collectCardElements(document, pageUrl)
+  const candidates = collection.cards.filter(isVisible)
   const items = []
   const seen = new Set()
   let skipped = 0
@@ -119,6 +122,9 @@ export function extractFavoritesPage(document, pageUrl, capturedAt = new Date())
       extracted: items.length,
       skipped,
       duplicates,
+      knownContainers: collection.knownContainers,
+      postLinks: collection.postLinks,
+      fallbackContainers: collection.fallbackContainers,
     },
     items,
   }
@@ -190,16 +196,58 @@ function hasActiveFavoritesTab(document) {
     .some((element) => normalizeWhitespace(element.textContent).includes('收藏')))
 }
 
-function collectCardElements(document) {
+function collectCardElements(document, pageUrl) {
   const cards = new Set()
+  const knownCards = new Set()
   for (const selector of CARD_SELECTORS) {
-    for (const card of document.querySelectorAll(selector)) cards.add(card)
+    for (const card of document.querySelectorAll(selector)) {
+      cards.add(card)
+      knownCards.add(card)
+    }
   }
-  return [...cards]
+
+  const postLinks = [...document.querySelectorAll('a[href]')]
+    .filter((link) => isVisible(link) && isPostLink(link.href || link.getAttribute('href'), pageUrl))
+  let fallbackContainers = 0
+  for (const link of postLinks) {
+    if ([...knownCards].some((card) => card.contains(link))) continue
+    const inferred = inferCardContainer(link, pageUrl)
+    if (inferred && !cards.has(inferred)) {
+      cards.add(inferred)
+      fallbackContainers++
+    }
+  }
+  return {
+    cards: [...cards],
+    knownContainers: knownCards.size,
+    postLinks: postLinks.length,
+    fallbackContainers,
+  }
+}
+
+function inferCardContainer(link, pageUrl) {
+  let current = link
+  let inferred = link
+  for (let depth = 0; depth < 7 && current?.parentElement; depth++) {
+    current = current.parentElement
+    if (current.tagName?.toLowerCase() === 'body') break
+    const linkCount = [...current.querySelectorAll('a[href]')]
+      .filter((candidate) => isPostLink(candidate.href || candidate.getAttribute('href'), pageUrl)).length
+    if (linkCount !== 1) break
+    inferred = current
+  }
+  return inferred
+}
+
+function isPostLink(value, base) {
+  return POST_PATH_PATTERN.test(safeUrl(value, base)?.pathname || '')
 }
 
 function extractCard(card, pageUrl, capturedAt) {
-  const anchor = [...card.querySelectorAll('a[href]')]
+  const anchors = card.matches?.('a[href]')
+    ? [card, ...card.querySelectorAll('a[href]')]
+    : [...card.querySelectorAll('a[href]')]
+  const anchor = anchors
     .find((candidate) => POST_PATH_PATTERN.test(safeUrl(candidate.href || candidate.getAttribute('href'), pageUrl)?.pathname || ''))
   const postUrl = anchor ? normalizePostUrl(anchor.href || anchor.getAttribute('href'), pageUrl) : null
   if (!postUrl) return null

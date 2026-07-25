@@ -29,8 +29,16 @@
         <h2 id="captureTitle">正在识别…</h2>
         <p id="captureMeta">请稍候</p>
         <ul id="captureWarnings" hidden></ul>
-        <button type="button" class="primary" id="captureButton" disabled>识别当前页面</button>
+        <div class="capture-actions">
+          <button type="button" class="primary" id="captureButton" disabled>识别当前页面</button>
+          <button type="button" class="rescan-button" id="rescanButton">重新扫描</button>
+        </div>
         <p class="capture-result" id="captureResult"></p>
+        <details class="diagnostic-panel" id="diagnosticPanel" hidden>
+          <summary>适配诊断（不包含帖子内容）</summary>
+          <textarea id="diagnosticText" rows="5" readonly></textarea>
+          <button type="button" class="copy-button" id="copyDiagnostics">复制诊断</button>
+        </details>
       </section>
 
       <button type="button" class="secondary" id="openKnowledgeBase">打开知识库</button>

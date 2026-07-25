@@ -37,4 +37,5 @@ The persisted model uses `sourceType`, `sourceItemId`, and `canonicalUrl`. Only 
 - M3: knowledge-base search, detail view, manual notes, archive, trash, and restore UI.
 - M4: user-managed two-level categories, cross-category tags, item assignment, and taxonomy filters.
 - M5: user-confirmed favorites-page card indexing, client deduplication, and 50-item import batches.
-- Next: real-page selector validation followed by optional AI metadata suggestions.
+- M5.1: link-based card-boundary fallback, in-popup rescanning, and content-free selector diagnostics.
+- Next: one logged-in manual selector validation followed by optional AI metadata suggestions.

@@ -91,12 +91,55 @@ h2 {
   font-size: 11px;
 }
 
+.capture-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.rescan-button {
+  width: auto;
+  color: #4e5e45;
+  background: #e5ebdf;
+}
+
 .capture-result.success {
   color: #527047;
 }
 
 .capture-result.error {
   color: #a5483a;
+}
+
+.diagnostic-panel {
+  margin-top: 10px;
+  border-top: 1px solid #e4ded3;
+}
+
+.diagnostic-panel summary {
+  padding-top: 10px;
+  color: #756e65;
+  font-size: 11px;
+}
+
+.diagnostic-panel textarea {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px;
+  resize: vertical;
+  border: 1px solid #d8d1c6;
+  border-radius: 8px;
+  color: #625c54;
+  background: #f7f4ee;
+  font: 10px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.copy-button {
+  margin-top: 6px;
+  padding: 7px 10px;
+  color: #5c6b53;
+  background: #e8ede4;
+  font-size: 11px;
 }
 
 .status-card.online {
