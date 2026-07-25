@@ -34,4 +34,5 @@ The persisted model uses `sourceType`, `sourceItemId`, and `canonicalUrl`. Only 
 - M0: backend health API, Vue shell, Manifest V3 connection popup.
 - M1: SQLite storage, token-protected idempotent import, item query/update/lifecycle APIs.
 - M2: user-triggered current-post preview and clipping with sanitized DOM fixture tests.
-- Next: favorites-page card indexing and the knowledge-base management UI.
+- M3: knowledge-base search, detail view, manual notes, archive, trash, and restore UI.
+- Next: category/tag management followed by favorites-page card indexing.
