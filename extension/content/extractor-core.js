@@ -248,7 +248,14 @@ function extractCard(card, pageUrl, capturedAt) {
     ? [card, ...card.querySelectorAll('a[href]')]
     : [...card.querySelectorAll('a[href]')]
   const anchor = anchors
-    .find((candidate) => POST_PATH_PATTERN.test(safeUrl(candidate.href || candidate.getAttribute('href'), pageUrl)?.pathname || ''))
+    .map((candidate, index) => ({
+      candidate,
+      index,
+      url: safeUrl(candidate.href || candidate.getAttribute('href'), pageUrl),
+    }))
+    .filter(({ url }) => POST_PATH_PATTERN.test(url?.pathname || ''))
+    .sort((left, right) => accessUrlScore(right.url) - accessUrlScore(left.url) || left.index - right.index)
+    .at(0)?.candidate
   const postUrl = anchor ? normalizePostUrl(anchor.href || anchor.getAttribute('href'), pageUrl) : null
   if (!postUrl) return null
 
@@ -277,6 +284,14 @@ function extractCard(card, pageUrl, capturedAt) {
     captureLevel: 'CARD',
     capturedAt,
   }
+}
+
+function accessUrlScore(url) {
+  if (!url) return 0
+  let score = 0
+  if (url.searchParams.get('xsec_token')) score += 2
+  if (url.searchParams.get('xsec_source')) score += 1
+  return score
 }
 
 function normalizePostUrl(value, pageUrl) {

@@ -75,7 +75,7 @@ test('extracts and deduplicates loaded cards from the favorites page', async () 
     skipped: 1,
     duplicates: 1,
     knownContainers: 5,
-    postLinks: 3,
+    postLinks: 4,
     fallbackContainers: 0,
   })
   assert.deepEqual(result.warnings, ['1 个卡片缺少标题或帖子链接，已跳过', '1 个重复卡片已合并'])
@@ -89,6 +89,10 @@ test('extracts and deduplicates loaded cards from the favorites page', async () 
     { sourceItemId: 'favorite-002', title: '英语听力练习方法', author: '示例作者乙', captureLevel: 'CARD' },
   ])
   assert.equal(result.items[0].capturedAt, '2026-07-25T05:00:00.000Z')
+  assert.equal(
+    result.items[0].url,
+    'https://www.xiaohongshu.com/explore/favorite-001?xsec_token=fixture-token&xsec_source=pc_collect',
+  )
 })
 
 test('detects an active favorites tab even when the URL has no tab query', async () => {
