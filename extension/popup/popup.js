@@ -10,7 +10,7 @@ const statusCard = document.querySelector('#statusCard')
 const statusTitle = document.querySelector('#statusTitle')
 const statusDetail = document.querySelector('#statusDetail')
 const openButton = document.querySelector('#openKnowledgeBase')
-const clipButton = document.querySelector('#clipCurrentPost')
+const captureButton = document.querySelector('#captureButton')
 const captureTitle = document.querySelector('#captureTitle')
 const captureMeta = document.querySelector('#captureMeta')
 const captureWarnings = document.querySelector('#captureWarnings')
@@ -25,7 +25,6 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault()
   submitButton.disabled = true
   submitButton.textContent = '检查中…'
-
   try {
     await chrome.storage.local.set(readFormSettings())
     await checkHealth()
@@ -37,28 +36,21 @@ form.addEventListener('submit', async (event) => {
   }
 })
 
-clipButton.addEventListener('click', async () => {
-  if (!currentExtraction?.item) return
-  clipButton.disabled = true
-  clipButton.textContent = '正在剪藏…'
+captureButton.addEventListener('click', async () => {
+  if (!currentExtraction?.items?.length) return
+  captureButton.disabled = true
+  captureButton.textContent = currentExtraction.captureMode === 'FAVORITES_PAGE' ? '正在分批同步…' : '正在剪藏…'
   renderCaptureResult('', '')
 
   try {
-    const response = await chrome.runtime.sendMessage({
-      type: 'IMPORT_XHS_ITEMS',
-      payload: currentExtraction,
-    })
-    if (!response?.ok) throw new Error(response?.error || '剪藏失败')
-
-    const { created, updated, skipped, failed } = response.result
-    if (failed) throw new Error(response.result.results?.[0]?.error || '后端未能保存这篇帖子')
-    const action = created ? '已保存到知识库' : updated ? '已更新知识副本' : skipped ? '知识库中已存在' : '处理完成'
-    renderCaptureResult(action, 'success')
+    const response = await chrome.runtime.sendMessage({ type: 'IMPORT_XHS_ITEMS', payload: currentExtraction })
+    if (!response?.ok) throw new Error(response?.error || '保存失败')
+    renderImportResult(response.result)
   } catch (error) {
-    renderCaptureResult(error instanceof Error ? error.message : '剪藏失败', 'error')
+    renderCaptureResult(error instanceof Error ? error.message : '保存失败', 'error')
   } finally {
-    clipButton.disabled = false
-    clipButton.textContent = '剪藏当前帖子'
+    captureButton.disabled = false
+    captureButton.textContent = captureButtonLabel()
   }
 })
 
@@ -75,27 +67,60 @@ async function inspectCurrentPage() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
     if (!tab?.id) throw new Error('无法读取当前标签页')
-    const response = await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_CURRENT_POST' })
+    const response = await chrome.tabs.sendMessage(tab.id, { type: 'INSPECT_XHS_PAGE' })
     if (!response?.ok) throw new Error(response?.error || '当前页面无法剪藏')
 
-    currentExtraction = {
-      extractorVersion: response.extractorVersion,
-      item: response.item,
+    if (response.pageType === 'CURRENT_POST') {
+      currentExtraction = {
+        captureMode: 'CURRENT_POST',
+        extractorVersion: response.extractorVersion,
+        items: [response.item],
+      }
+      captureTitle.textContent = response.item.title
+      captureMeta.textContent = [
+        response.item.author || '作者未知',
+        response.item.captureLevel === 'DETAIL' ? '正文快照' : '链接卡片',
+        response.item.imageUrls.length ? `${response.item.imageUrls.length} 张图片` : null,
+      ].filter(Boolean).join(' · ')
+    } else if (response.pageType === 'FAVORITES_PAGE') {
+      currentExtraction = {
+        captureMode: 'FAVORITES_PAGE',
+        extractorVersion: response.extractorVersion,
+        items: response.items,
+      }
+      captureTitle.textContent = `识别到 ${response.items.length} 条已加载收藏`
+      captureMeta.textContent = response.items.length
+        ? `页面共扫描 ${response.stats.candidates} 个卡片；向下滚动后重新打开插件可加载更多`
+        : '请确认已进入“收藏”标签，并先向下滚动加载内容'
+    } else {
+      throw new Error('当前页面类型暂不支持')
     }
-    captureTitle.textContent = response.item.title
-    captureMeta.textContent = [
-      response.item.author || '作者未知',
-      response.item.captureLevel === 'DETAIL' ? '正文快照' : '链接卡片',
-      response.item.imageUrls.length ? `${response.item.imageUrls.length} 张图片` : null,
-    ].filter(Boolean).join(' · ')
+
     renderWarnings(response.warnings || [])
-    clipButton.disabled = false
+    captureButton.textContent = captureButtonLabel()
+    captureButton.disabled = currentExtraction.items.length === 0
   } catch (error) {
+    currentExtraction = null
     captureTitle.textContent = '当前页面不可剪藏'
     captureMeta.textContent = explainTabError(error)
     renderWarnings([])
-    clipButton.disabled = true
+    captureButton.disabled = true
   }
+}
+
+function renderImportResult(result) {
+  const changed = result.created + result.updated
+  const message = `新增 ${result.created} · 更新 ${result.updated} · 已存在 ${result.skipped}`
+  if (result.failed > 0) {
+    renderCaptureResult(`${message} · 失败 ${result.failed}`, 'error')
+  } else {
+    renderCaptureResult(changed > 0 ? message : '这些内容已经在知识库中', 'success')
+  }
+}
+
+function captureButtonLabel() {
+  if (currentExtraction?.captureMode === 'FAVORITES_PAGE') return `同步 ${currentExtraction.items.length} 条收藏`
+  return '剪藏当前帖子'
 }
 
 async function checkHealth() {
@@ -155,6 +180,6 @@ function renderHealthError(message) {
 
 function explainTabError(error) {
   const message = error instanceof Error ? error.message : String(error || '')
-  if (message.includes('Receiving end does not exist')) return '请打开或刷新一个小红书帖子页面'
-  return message || '请打开一个小红书帖子页面'
+  if (message.includes('Receiving end does not exist')) return '请打开或刷新小红书帖子或“我的收藏”页面'
+  return message || '请打开小红书帖子或“我的收藏”页面'
 }

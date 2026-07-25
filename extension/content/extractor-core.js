@@ -1,6 +1,7 @@
-export const EXTRACTOR_VERSION = 'xhs-dom-1'
+export const EXTRACTOR_VERSION = 'xhs-dom-2'
 
 const POST_PATH_PATTERN = /^\/(?:explore|discovery\/item)\/([^/?#]+)/u
+const PROFILE_PATH_PATTERN = /^\/user\/profile\/[^/?#]+/u
 const TITLE_SELECTORS = [
   '#detail-title',
   '[data-testid="note-title"]',
@@ -25,6 +26,22 @@ const IMAGE_SELECTORS = [
   '[data-testid="note-image"] img',
   'meta[property="og:image"]',
 ]
+const CARD_SELECTORS = [
+  'section.note-item',
+  '.feeds-container .note-item',
+  '[data-testid="note-card"]',
+  '.collection-list .note-item',
+]
+const CARD_TITLE_SELECTORS = [
+  '[data-testid="note-card-title"]',
+  '.footer .title',
+  '.title',
+]
+const CARD_AUTHOR_SELECTORS = [
+  '[data-testid="note-card-author"]',
+  '.author-wrapper .name',
+  '.author .name',
+]
 
 export class ExtractionError extends Error {
   constructor(code, message) {
@@ -41,13 +58,69 @@ export function detectPage(url, document) {
   }
 
   const match = parsed.pathname.match(POST_PATH_PATTERN)
-  if (!match) {
-    return { pageType: 'UNSUPPORTED', reason: '当前不是可识别的小红书帖子页' }
+  if (match) {
+    return {
+      pageType: 'CURRENT_POST',
+      sourceItemId: match[1] || null,
+    }
   }
 
+  const tab = parsed.searchParams.get('tab')?.toLowerCase()
+  const isFavoritesTab = ['fav', 'collect', 'collection', 'favorites'].includes(tab || '')
+    || hasActiveFavoritesTab(document)
+  if (PROFILE_PATH_PATTERN.test(parsed.pathname) && isFavoritesTab) {
+    return { pageType: 'FAVORITES_PAGE' }
+  }
+
+  return { pageType: 'UNSUPPORTED', reason: '请打开小红书帖子或“我的收藏”页面' }
+}
+
+export function extractFavoritesPage(document, pageUrl, capturedAt = new Date()) {
+  const detection = detectPage(pageUrl, document)
+  if (detection.pageType !== 'FAVORITES_PAGE') {
+    throw new ExtractionError('UNSUPPORTED_PAGE', detection.reason)
+  }
+
+  const candidates = collectCardElements(document).filter(isVisible)
+  const items = []
+  const seen = new Set()
+  let skipped = 0
+  let duplicates = 0
+  const timestamp = capturedAt.toISOString()
+
+  for (const card of candidates) {
+    if (items.length >= 500) break
+    const item = extractCard(card, pageUrl, timestamp)
+    if (!item) {
+      skipped++
+      continue
+    }
+    const key = item.sourceItemId || canonicalPostKey(item.url)
+    if (seen.has(key)) {
+      duplicates++
+      continue
+    }
+    seen.add(key)
+    items.push(item)
+  }
+
+  const warnings = []
+  if (items.length === 0) warnings.push('没有识别到已加载的收藏卡片，请确认已打开“收藏”标签')
+  if (skipped > 0) warnings.push(`${skipped} 个卡片缺少标题或帖子链接，已跳过`)
+  if (duplicates > 0) warnings.push(`${duplicates} 个重复卡片已合并`)
+  if (candidates.length > 500) warnings.push('当前页面卡片超过 500 条，本次只处理前 500 条')
+
   return {
-    pageType: 'CURRENT_POST',
-    sourceItemId: match?.[1] || null,
+    pageType: 'FAVORITES_PAGE',
+    extractorVersion: EXTRACTOR_VERSION,
+    warnings,
+    stats: {
+      candidates: candidates.length,
+      extracted: items.length,
+      skipped,
+      duplicates,
+    },
+    items,
   }
 }
 
@@ -90,8 +163,12 @@ export function extractCurrentPost(document, pageUrl, capturedAt = new Date()) {
 }
 
 function firstText(document, selectors) {
+  return firstTextWithin(document, selectors)
+}
+
+function firstTextWithin(root, selectors) {
   for (const selector of selectors) {
-    const element = document.querySelector(selector)
+    const element = root.querySelector(selector)
     if (!element || !isVisible(element)) continue
     const value = element.tagName?.toLowerCase() === 'meta'
       ? element.getAttribute('content')
@@ -100,6 +177,70 @@ function firstText(document, selectors) {
     if (normalized) return normalized
   }
   return ''
+}
+
+function hasActiveFavoritesTab(document) {
+  const selectors = [
+    '[role="tab"][aria-selected="true"]',
+    '.reds-tab-item.active',
+    '.tab-item.active',
+    '[data-testid="favorites-tab"]',
+  ]
+  return selectors.some((selector) => [...document.querySelectorAll(selector)]
+    .some((element) => normalizeWhitespace(element.textContent).includes('收藏')))
+}
+
+function collectCardElements(document) {
+  const cards = new Set()
+  for (const selector of CARD_SELECTORS) {
+    for (const card of document.querySelectorAll(selector)) cards.add(card)
+  }
+  return [...cards]
+}
+
+function extractCard(card, pageUrl, capturedAt) {
+  const anchor = [...card.querySelectorAll('a[href]')]
+    .find((candidate) => POST_PATH_PATTERN.test(safeUrl(candidate.href || candidate.getAttribute('href'), pageUrl)?.pathname || ''))
+  const postUrl = anchor ? normalizePostUrl(anchor.href || anchor.getAttribute('href'), pageUrl) : null
+  if (!postUrl) return null
+
+  const image = card.querySelector('.cover img, a.cover img, img')
+  const coverUrl = normalizeMediaUrl(
+    image?.currentSrc || image?.getAttribute('data-src') || image?.getAttribute('src'),
+    pageUrl,
+  )
+  const title = limit(
+    firstTextWithin(card, CARD_TITLE_SELECTORS)
+      || normalizeWhitespace(anchor.getAttribute('title'))
+      || normalizeWhitespace(image?.getAttribute('alt')),
+    500,
+  )
+  if (!title) return null
+
+  const sourceItemId = new URL(postUrl).pathname.match(POST_PATH_PATTERN)?.[1] || null
+  return {
+    sourceItemId,
+    url: postUrl,
+    title,
+    author: limit(firstTextWithin(card, CARD_AUTHOR_SELECTORS), 200) || null,
+    text: null,
+    coverUrl,
+    imageUrls: coverUrl ? [coverUrl] : [],
+    captureLevel: 'CARD',
+    capturedAt,
+  }
+}
+
+function normalizePostUrl(value, pageUrl) {
+  const parsed = safeUrl(value, pageUrl)
+  if (!parsed || parsed.hostname !== 'www.xiaohongshu.com' || !POST_PATH_PATTERN.test(parsed.pathname)) return null
+  parsed.hash = ''
+  return parsed.toString()
+}
+
+function canonicalPostKey(value) {
+  const parsed = new URL(value)
+  return `${parsed.hostname}${parsed.pathname}`
 }
 
 function collectImageUrls(document, pageUrl) {
@@ -138,9 +279,9 @@ function normalizeMediaUrl(value, pageUrl) {
   }
 }
 
-function safeUrl(value) {
+function safeUrl(value, base) {
   try {
-    return new URL(value)
+    return new URL(value, base)
   } catch {
     return null
   }

@@ -1,10 +1,15 @@
 let extractorPromise
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type !== 'EXTRACT_CURRENT_POST') return false
+  if (message?.type !== 'INSPECT_XHS_PAGE') return false
 
   getExtractor()
-    .then(({ extractCurrentPost }) => extractCurrentPost(document, window.location.href))
+    .then(({ detectPage, extractCurrentPost, extractFavoritesPage }) => {
+      const page = detectPage(window.location.href, document)
+      if (page.pageType === 'CURRENT_POST') return extractCurrentPost(document, window.location.href)
+      if (page.pageType === 'FAVORITES_PAGE') return extractFavoritesPage(document, window.location.href)
+      throw Object.assign(new Error(page.reason), { code: 'UNSUPPORTED_PAGE' })
+    })
     .then((result) => sendResponse({ ok: true, ...result }))
     .catch((error) => sendResponse({
       ok: false,

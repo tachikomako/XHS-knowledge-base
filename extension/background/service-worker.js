@@ -1,3 +1,5 @@
+import { createImportSummary, mergeImportResult, splitImportBatches } from './batch-core.js'
+
 const DEFAULT_SETTINGS = Object.freeze({
   backendUrl: 'http://127.0.0.1:8080',
   knowledgeBaseUrl: 'http://127.0.0.1:5173',
@@ -36,8 +38,19 @@ async function checkHealth() {
 }
 
 async function importItems(payload) {
-  if (!payload?.item || !payload?.extractorVersion) {
+  const items = Array.isArray(payload?.items) ? payload.items : payload?.item ? [payload.item] : []
+  const captureMode = payload?.captureMode || (items.length === 1 ? 'CURRENT_POST' : 'FAVORITES_PAGE')
+  if (!payload?.extractorVersion) {
     throw new Error('剪藏数据不完整，请刷新帖子页面后重试')
+  }
+  let batches
+  try {
+    batches = splitImportBatches(items)
+  } catch {
+    throw new Error('剪藏数据必须包含 1 到 500 条内容')
+  }
+  if (!['CURRENT_POST', 'FAVORITES_PAGE'].includes(captureMode)) {
+    throw new Error('不支持的剪藏模式')
   }
 
   const settings = await chrome.storage.local.get(Object.keys(DEFAULT_SETTINGS))
@@ -47,20 +60,24 @@ async function importItems(payload) {
     throw new Error('请先在设置中填写与后端一致的本地访问令牌')
   }
 
-  const result = await requestJson(`${backendUrl}/api/v1/imports/xiaohongshu`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      'X-Extension-Token': extensionToken,
-    },
-    body: JSON.stringify({
-      clientBatchId: crypto.randomUUID(),
-      captureMode: 'CURRENT_POST',
-      extractorVersion: payload.extractorVersion,
-      items: [payload.item],
-    }),
-  })
+  const result = createImportSummary()
+  for (const chunk of batches) {
+    const batch = await requestJson(`${backendUrl}/api/v1/imports/xiaohongshu`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-Extension-Token': extensionToken,
+      },
+      body: JSON.stringify({
+        clientBatchId: crypto.randomUUID(),
+        captureMode,
+        extractorVersion: payload.extractorVersion,
+        items: chunk,
+      }),
+    })
+    mergeImportResult(result, batch)
+  }
   return { ok: true, result }
 }
 
