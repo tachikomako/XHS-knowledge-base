@@ -1,4 +1,4 @@
-export const EXTRACTOR_VERSION = 'xhs-dom-2'
+export const EXTRACTOR_VERSION = 'xhs-dom-3'
 
 const POST_PATH_PATTERN = /^\/(?:explore|discovery\/item)\/([^/?#]+)/u
 const PROFILE_PATH_PATTERN = /^\/user\/profile\/[^/?#]+/u
@@ -224,6 +224,7 @@ function findFavoritesRoot(document) {
   if (visiblePanels.length === 1) return visiblePanels[0]
 
   const visibleRoots = [...new Set([
+    ...document.querySelectorAll('#userPostedFeeds'),
     ...document.querySelectorAll('[data-testid="favorites-content"]'),
     ...document.querySelectorAll('.collection-list'),
     ...document.querySelectorAll('.feeds-container'),

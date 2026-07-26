@@ -17,7 +17,7 @@ test('extracts a visible current post into the backend contract', async () => {
   )
 
   assert.equal(result.pageType, 'CURRENT_POST')
-  assert.equal(result.extractorVersion, 'xhs-dom-2')
+  assert.equal(result.extractorVersion, 'xhs-dom-3')
   assert.deepEqual(result.warnings, [])
   assert.deepEqual(result.item, {
     sourceItemId: 'fixture-post-001',
@@ -68,7 +68,7 @@ test('extracts and deduplicates loaded cards from the favorites page', async () 
   )
 
   assert.equal(result.pageType, 'FAVORITES_PAGE')
-  assert.equal(result.extractorVersion, 'xhs-dom-2')
+  assert.equal(result.extractorVersion, 'xhs-dom-3')
   assert.deepEqual(result.stats, {
     candidates: 4,
     extracted: 2,
