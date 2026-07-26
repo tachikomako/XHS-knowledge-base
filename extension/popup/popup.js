@@ -110,7 +110,7 @@ async function inspectCurrentPage() {
         response.item.captureLevel === 'DETAIL' ? '正文快照' : '链接卡片',
         response.item.imageUrls.length ? `${response.item.imageUrls.length} 张图片` : null,
       ].filter(Boolean).join(' · ')
-    } else if (response.pageType === 'FAVORITES_PAGE') {
+    } else if (response.pageType === 'FAVORITE') {
       currentExtraction = {
         captureMode: 'FAVORITES_PAGE',
         extractorVersion: response.extractorVersion,
@@ -130,6 +130,11 @@ async function inspectCurrentPage() {
         ? '当前为普通信息流，仅展示识别结果；不会同步点赞、主页或信息流'
         : '当前页面暂未加载帖子，可滚动页面后重新扫描'
       captureButton.textContent = '当前页面仅识别'
+    } else if (response.pageType === 'LIKED') {
+      currentExtraction = null
+      captureTitle.textContent = '已识别点赞页面'
+      captureMeta.textContent = `识别到 ${response.postCount} 条已加载帖子；当前版本不提供点赞同步`
+      captureButton.textContent = '当前版本不提供点赞同步'
     } else {
       throw new Error('当前页面类型暂不支持')
     }
