@@ -4,10 +4,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== 'INSPECT_XHS_PAGE') return false
 
   getExtractor()
-    .then(({ EXTRACTOR_VERSION, detectPage, extractCurrentPost, extractFavoritesPage }) => {
+    .then(async ({ EXTRACTOR_VERSION, detectPage, extractCurrentPost, extractFavoritesPage }) => {
       const page = detectPage(window.location.href, document)
       if (page.pageType === 'CURRENT_POST') return extractCurrentPost(document, window.location.href)
-      if (page.pageType === 'FAVORITE') return extractFavoritesPage(document, window.location.href)
+      if (page.pageType === 'FAVORITE') {
+        const response = await chrome.runtime.sendMessage({ type: 'READ_XHS_ACCESS_CONTEXT' }).catch(() => null)
+        return extractFavoritesPage(document, window.location.href, new Date(), response?.accessContexts || [])
+      }
       if (['LIKED', 'FEED'].includes(page.pageType)) return { ...page, extractorVersion: EXTRACTOR_VERSION }
       throw Object.assign(new Error(page.reason), { code: 'UNSUPPORTED_PAGE' })
     })

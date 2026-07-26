@@ -116,9 +116,9 @@ async function inspectCurrentPage() {
         extractorVersion: response.extractorVersion,
         items: response.items,
       }
-      captureTitle.textContent = `识别到 ${response.items.length} 条已加载收藏`
-      captureMeta.textContent = response.items.length
-        ? `页面共扫描 ${response.stats.candidates} 个卡片；向下滚动后重新打开插件可加载更多`
+      captureTitle.textContent = `识别到 ${response.stats.candidates} 条已加载收藏`
+      captureMeta.textContent = response.stats.candidates
+        ? `可同步 ${response.items.length} 条 · 缺少访问参数 ${response.stats.missingTokenCount} 条；向下滚动后可加载更多`
         : '请确认已进入“收藏”标签，并先向下滚动加载内容'
       renderDiagnostics(response.stats)
     } else if (response.pageType === 'FEED') {
@@ -171,6 +171,10 @@ function renderDiagnostics(stats) {
     knownContainers: stats.knownContainers,
     postLinks: stats.postLinks,
     fallbackContainers: stats.fallbackContainers,
+    fullUrlCount: stats.fullUrlCount,
+    bareUrlCount: stats.bareUrlCount,
+    stateTokenMatchCount: stats.stateTokenMatchCount,
+    missingTokenCount: stats.missingTokenCount,
   }, null, 2)
   diagnosticPanel.hidden = false
 }

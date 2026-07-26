@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { parseHTML } from 'linkedom'
 
 import {
+  buildXiaohongshuAccessUrl,
   detectPage,
   detectProfileTab,
   ExtractionError,
@@ -23,7 +24,7 @@ test('extracts a visible current post into the backend contract', async () => {
   )
 
   assert.equal(result.pageType, 'CURRENT_POST')
-  assert.equal(result.extractorVersion, 'xhs-dom-5')
+  assert.equal(result.extractorVersion, 'xhs-dom-6')
   assert.equal(result.canClip, true)
   assert.equal(result.canBatch, false)
   assert.deepEqual(result.warnings, [])
@@ -114,8 +115,8 @@ test('recognizes liked profile pages without enabling sync', () => {
 test('extracts URL-confirmed favorites without a fixed container', () => {
   const document = parseHTML(`
     <html><body><main>
-      <a href="/explore/url-favorite-001" title="收藏一"></a>
-      <a href="/explore/url-favorite-002" title="收藏二"></a>
+      <a href="/explore/url-favorite-001?xsec_token=fake-one&amp;xsec_source=pc_collect" title="收藏一"></a>
+      <a href="/explore/url-favorite-002?xsec_token=fake-two&amp;xsec_source=pc_collect" title="收藏二"></a>
     </main></body></html>
   `).document
   const result = extractFavoritesPage(
@@ -133,10 +134,11 @@ test('extracts and deduplicates loaded cards from the favorites page', async () 
     document,
     'https://www.xiaohongshu.com/user/profile/fixture-user?tab=fav',
     new Date('2026-07-25T05:00:00.000Z'),
+    fakeAccessContexts('favorite-001', 'favorite-002'),
   )
 
   assert.equal(result.pageType, 'FAVORITE')
-  assert.equal(result.extractorVersion, 'xhs-dom-5')
+  assert.equal(result.extractorVersion, 'xhs-dom-6')
   assert.equal(result.canClip, false)
   assert.equal(result.canBatch, true)
   assert.deepEqual(result.stats, {
@@ -144,6 +146,10 @@ test('extracts and deduplicates loaded cards from the favorites page', async () 
     extracted: 2,
     skipped: 1,
     duplicates: 1,
+    fullUrlCount: 1,
+    bareUrlCount: 2,
+    stateTokenMatchCount: 2,
+    missingTokenCount: 0,
     knownContainers: 5,
     postLinks: 4,
     fallbackContainers: 0,
@@ -198,6 +204,8 @@ test('infers card boundaries from post links when Xiaohongshu class names change
   const result = extractFavoritesPage(
     document,
     'https://www.xiaohongshu.com/user/profile/fixture-user?tab=fav',
+    new Date(),
+    fakeAccessContexts('fallback-001', 'fallback-002'),
   )
 
   assert.equal(result.stats.knownContainers, 0)
@@ -221,9 +229,80 @@ test('uses a post link itself when the page has no card wrapper', () => {
   const result = extractFavoritesPage(
     document,
     'https://www.xiaohongshu.com/user/profile/fixture-user?tab=fav',
+    new Date(),
+    fakeAccessContexts('direct-001', 'direct-002'),
   )
   assert.deepEqual(result.items.map((item) => item.title), ['直接链接一', '直接链接二'])
 })
+
+test('builds an access URL from page state when the card href is bare', () => {
+  assert.equal(
+    buildXiaohongshuAccessUrl({
+      noteId: 'state-001',
+      hrefCandidates: ['/explore/state-001'],
+      xsecToken: 'fake-state-token',
+    }),
+    'https://www.xiaohongshu.com/explore/state-001?xsec_token=fake-state-token&xsec_source=pc_collect',
+  )
+})
+
+test('prefers a complete card href over a bare href and page state', () => {
+  assert.equal(
+    buildXiaohongshuAccessUrl({
+      noteId: 'mixed-001',
+      hrefCandidates: [
+        '/explore/mixed-001',
+        '/explore/mixed-001?xsec_token=fake-href-token&xsec_source=pc_collect',
+      ],
+      xsecToken: 'fake-state-token',
+    }),
+    'https://www.xiaohongshu.com/explore/mixed-001?xsec_token=fake-href-token&xsec_source=pc_collect',
+  )
+})
+
+test('skips a bare favorite link when no access context exists', () => {
+  const document = parseHTML(`
+    <html><body><main><a href="/explore/missing-001" title="缺少参数"></a></main></body></html>
+  `).document
+  const result = extractFavoritesPage(
+    document,
+    'https://www.xiaohongshu.com/user/profile/fixture?tab=fav&subTab=note',
+  )
+
+  assert.deepEqual(result.items, [])
+  assert.deepEqual(result.skippedItems, [{
+    status: 'SKIPPED_MISSING_ACCESS_CONTEXT',
+    noteId: 'missing-001',
+    hadCompleteHref: false,
+  }])
+  assert.equal(result.stats.missingTokenCount, 1)
+  assert.match(result.warnings.at(-1), /不会保存为失效链接/u)
+})
+
+test('uses access parameters stored on a card data attribute', () => {
+  const document = parseHTML(`
+    <html><body><main><article class="note-item" data-xsec-token="fake-data-token">
+      <a href="/explore/data-001" title="卡片参数"></a>
+    </article></main></body></html>
+  `).document
+  const result = extractFavoritesPage(
+    document,
+    'https://www.xiaohongshu.com/user/profile/fixture?tab=fav&subTab=note',
+  )
+
+  assert.equal(
+    result.items[0].url,
+    'https://www.xiaohongshu.com/explore/data-001?xsec_token=fake-data-token&xsec_source=pc_collect',
+  )
+})
+
+function fakeAccessContexts(...noteIds) {
+  return noteIds.map((noteId) => ({
+    noteId,
+    xsecToken: `fake-token-${noteId}`,
+    xsecSource: 'pc_collect',
+  }))
+}
 
 async function loadFixture(name) {
   const html = await readFile(fileURLToPath(new URL(name, fixtureRoot)), 'utf8')
