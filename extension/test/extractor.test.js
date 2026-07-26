@@ -17,7 +17,9 @@ test('extracts a visible current post into the backend contract', async () => {
   )
 
   assert.equal(result.pageType, 'CURRENT_POST')
-  assert.equal(result.extractorVersion, 'xhs-dom-3')
+  assert.equal(result.extractorVersion, 'xhs-dom-4')
+  assert.equal(result.canClip, true)
+  assert.equal(result.canBatch, false)
   assert.deepEqual(result.warnings, [])
   assert.deepEqual(result.item, {
     sourceItemId: 'fixture-post-001',
@@ -50,13 +52,32 @@ test('falls back to Open Graph metadata', async () => {
 test('rejects unrelated pages without extracting arbitrary content', () => {
   const document = parseHTML('<html><head><title>普通页面</title></head><body></body></html>').document
   assert.deepEqual(detectPage('https://www.xiaohongshu.com/user/profile/example', document), {
-    pageType: 'UNSUPPORTED',
-    reason: '请打开小红书帖子或“我的收藏”页面',
+    pageType: 'FEED',
+    canClip: false,
+    canBatch: false,
+    postCount: 0,
   })
   assert.throws(
     () => extractCurrentPost(document, 'https://www.xiaohongshu.com/user/profile/example'),
     (error) => error instanceof ExtractionError && error.code === 'UNSUPPORTED_PAGE',
   )
+})
+
+test('reports feed capabilities without enabling collection sync', () => {
+  const document = parseHTML(`
+    <html><body><main>
+      <a href="/explore/feed-001">信息流一</a>
+      <a href="/explore/feed-002">信息流二</a>
+      <a href="/explore/feed-002">重复链接</a>
+    </main></body></html>
+  `).document
+
+  assert.deepEqual(detectPage('https://www.xiaohongshu.com/explore', document), {
+    pageType: 'FEED',
+    canClip: false,
+    canBatch: true,
+    postCount: 2,
+  })
 })
 
 test('extracts and deduplicates loaded cards from the favorites page', async () => {
@@ -68,7 +89,9 @@ test('extracts and deduplicates loaded cards from the favorites page', async () 
   )
 
   assert.equal(result.pageType, 'FAVORITES_PAGE')
-  assert.equal(result.extractorVersion, 'xhs-dom-3')
+  assert.equal(result.extractorVersion, 'xhs-dom-4')
+  assert.equal(result.canClip, false)
+  assert.equal(result.canBatch, true)
   assert.deepEqual(result.stats, {
     candidates: 4,
     extracted: 2,
@@ -99,6 +122,9 @@ test('detects an active favorites tab even when the URL has no tab query', async
   const document = await loadFixture('favorites-page.html')
   assert.deepEqual(detectPage('https://www.xiaohongshu.com/user/profile/fixture-user', document), {
     pageType: 'FAVORITES_PAGE',
+    canClip: false,
+    canBatch: true,
+    postCount: 2,
   })
 })
 

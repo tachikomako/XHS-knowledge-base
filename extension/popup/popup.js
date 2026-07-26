@@ -1,3 +1,5 @@
+import { withTimeout } from './popup-core.js'
+
 const DEFAULT_SETTINGS = Object.freeze({
   backendUrl: 'http://127.0.0.1:8080',
   knowledgeBaseUrl: 'http://127.0.0.1:5173',
@@ -28,6 +30,7 @@ await Promise.all([checkHealth(), inspectCurrentPage()])
 form.addEventListener('submit', async (event) => {
   event.preventDefault()
   submitButton.disabled = true
+  submitButton.setAttribute('aria-busy', 'true')
   submitButton.textContent = '检查中…'
   try {
     await chrome.storage.local.set(readFormSettings())
@@ -36,6 +39,7 @@ form.addEventListener('submit', async (event) => {
     renderHealthError(error instanceof Error ? error.message : '保存设置失败')
   } finally {
     submitButton.disabled = false
+    submitButton.removeAttribute('aria-busy')
     submitButton.textContent = '保存并检查连接'
   }
 })
@@ -43,6 +47,7 @@ form.addEventListener('submit', async (event) => {
 captureButton.addEventListener('click', async () => {
   if (!currentExtraction?.items?.length) return
   captureButton.disabled = true
+  captureButton.setAttribute('aria-busy', 'true')
   captureButton.textContent = currentExtraction.captureMode === 'FAVORITES_PAGE' ? '正在分批同步…' : '正在剪藏…'
   renderCaptureResult('', '')
 
@@ -54,6 +59,7 @@ captureButton.addEventListener('click', async () => {
     renderCaptureResult(error instanceof Error ? error.message : '保存失败', 'error')
   } finally {
     captureButton.disabled = false
+    captureButton.removeAttribute('aria-busy')
     captureButton.textContent = captureButtonLabel()
   }
 })
@@ -78,14 +84,18 @@ openButton.addEventListener('click', async () => {
 async function inspectCurrentPage() {
   captureButton.disabled = true
   rescanButton.disabled = true
+  rescanButton.setAttribute('aria-busy', 'true')
+  rescanButton.textContent = '识别中…'
   diagnosticPanel.hidden = true
   captureTitle.textContent = '正在重新扫描…'
   captureMeta.textContent = '只读取当前页面已经加载的内容'
   renderCaptureResult('', '')
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-    if (!tab?.id) throw new Error('无法读取当前标签页')
-    const response = await chrome.tabs.sendMessage(tab.id, { type: 'INSPECT_XHS_PAGE' })
+    const response = await withTimeout((async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      if (!tab?.id) throw new Error('无法读取当前标签页')
+      return chrome.tabs.sendMessage(tab.id, { type: 'INSPECT_XHS_PAGE' })
+    })())
     if (!response?.ok) throw new Error(response?.error || '当前页面无法剪藏')
 
     if (response.pageType === 'CURRENT_POST') {
@@ -111,22 +121,36 @@ async function inspectCurrentPage() {
         ? `页面共扫描 ${response.stats.candidates} 个卡片；向下滚动后重新打开插件可加载更多`
         : '请确认已进入“收藏”标签，并先向下滚动加载内容'
       renderDiagnostics(response.stats)
+    } else if (response.pageType === 'FEED') {
+      currentExtraction = null
+      captureTitle.textContent = response.postCount
+        ? `识别到 ${response.postCount} 条帖子`
+        : '已识别小红书页面'
+      captureMeta.textContent = response.postCount
+        ? '当前为普通信息流，仅展示识别结果；不会同步点赞、主页或信息流'
+        : '当前页面暂未加载帖子，可滚动页面后重新扫描'
+      captureButton.textContent = '当前页面仅识别'
     } else {
       throw new Error('当前页面类型暂不支持')
     }
 
     renderWarnings(response.warnings || [])
-    captureButton.textContent = captureButtonLabel()
-    captureButton.disabled = currentExtraction.items.length === 0
+    if (currentExtraction) {
+      captureButton.textContent = captureButtonLabel()
+      captureButton.disabled = currentExtraction.items.length === 0
+    }
   } catch (error) {
     currentExtraction = null
     captureTitle.textContent = '当前页面不可剪藏'
     captureMeta.textContent = explainTabError(error)
+    captureButton.textContent = '识别当前页面'
     renderWarnings([])
     captureButton.disabled = true
     diagnosticPanel.hidden = true
   } finally {
     rescanButton.disabled = false
+    rescanButton.removeAttribute('aria-busy')
+    rescanButton.textContent = '重新扫描'
   }
 }
 
