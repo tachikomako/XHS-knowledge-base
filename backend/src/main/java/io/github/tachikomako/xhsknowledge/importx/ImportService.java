@@ -65,7 +65,7 @@ public class ImportService {
                 results.add(result);
                 switch (result.status()) {
                     case "CREATED" -> created++;
-                    case "UPDATED" -> updated++;
+                    case "UPDATED", "RESTORED" -> updated++;
                     default -> skipped++;
                 }
             } catch (ApiException | IllegalArgumentException exception) {
@@ -118,7 +118,13 @@ public class ImportService {
             return new ImportResponse.ItemResult(index, created.getId(), source.sourceItemId(), "CREATED", null);
         }
         if ("TRASHED".equals(existing.getLifecycleStatus())) {
-            return new ImportResponse.ItemResult(index, existing.getId(), source.sourceItemId(), "SKIPPED", null);
+            mergeSourceFields(existing, incoming, source);
+            String timestamp = now();
+            existing.setLifecycleStatus("ACTIVE");
+            existing.setSourceUpdatedAt(timestamp);
+            existing.setUpdatedAt(timestamp);
+            itemMapper.updateById(existing);
+            return new ImportResponse.ItemResult(index, existing.getId(), source.sourceItemId(), "RESTORED", null);
         }
 
         boolean changed = mergeSourceFields(existing, incoming, source);

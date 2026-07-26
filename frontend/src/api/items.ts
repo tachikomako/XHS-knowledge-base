@@ -85,6 +85,17 @@ export function changeItemLifecycle(id: string, action: 'archive' | 'trash' | 'r
   return requestJson(`/api/v1/items/${encodeURIComponent(id)}/${action}`, { method: 'POST' })
 }
 
+export async function permanentlyDeleteItem(id: string): Promise<void> {
+  const response = await fetch(`/api/v1/items/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { message?: string } | null
+    throw new Error(body?.message || `后端返回 ${response.status}`)
+  }
+}
+
 async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(url, {
     ...options,

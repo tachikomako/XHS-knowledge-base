@@ -67,10 +67,7 @@ export function detectPage(url, document) {
     }
   }
 
-  const tab = parsed.searchParams.get('tab')?.toLowerCase()
-  const isFavoritesTab = ['fav', 'collect', 'collection', 'favorites'].includes(tab || '')
-    || hasActiveFavoritesTab(document)
-  if (PROFILE_PATH_PATTERN.test(parsed.pathname) && isFavoritesTab) {
+  if (PROFILE_PATH_PATTERN.test(parsed.pathname) && findActiveFavoritesTab(document)) {
     return { pageType: 'FAVORITES_PAGE' }
   }
 
@@ -83,7 +80,15 @@ export function extractFavoritesPage(document, pageUrl, capturedAt = new Date())
     throw new ExtractionError('UNSUPPORTED_PAGE', detection.reason)
   }
 
-  const collection = collectCardElements(document, pageUrl)
+  const root = findFavoritesRoot(document)
+  if (!root) {
+    throw new ExtractionError(
+      'FAVORITES_ROOT_NOT_FOUND',
+      '未能识别当前收藏区域，请重新扫描或复制匿名诊断',
+    )
+  }
+
+  const collection = collectCardElements(root, pageUrl)
   const candidates = collection.cards.filter(isVisible)
   const items = []
   const seen = new Set()
@@ -185,28 +190,58 @@ function firstTextWithin(root, selectors) {
   return ''
 }
 
-function hasActiveFavoritesTab(document) {
+function findActiveFavoritesTab(document) {
   const selectors = [
     '[role="tab"][aria-selected="true"]',
     '.reds-tab-item.active',
     '.tab-item.active',
-    '[data-testid="favorites-tab"]',
+    '[data-testid="favorites-tab"][aria-selected="true"]',
+    '[data-testid="favorites-tab"].active',
   ]
-  return selectors.some((selector) => [...document.querySelectorAll(selector)]
-    .some((element) => normalizeWhitespace(element.textContent).includes('收藏')))
+  for (const selector of selectors) {
+    const tab = [...document.querySelectorAll(selector)]
+      .find((element) => isVisible(element) && normalizeWhitespace(element.textContent).includes('收藏'))
+    if (tab) return tab
+  }
+  return null
 }
 
-function collectCardElements(document, pageUrl) {
+function findFavoritesRoot(document) {
+  const tab = findActiveFavoritesTab(document)
+  if (!tab) return null
+
+  const controlledId = tab.getAttribute('aria-controls')
+  const controlled = controlledId ? document.getElementById(controlledId) : null
+  if (controlled && isVisible(controlled)) return controlled
+
+  const labelledPanel = tab.id
+    ? [...document.querySelectorAll('[role="tabpanel"]')]
+      .find((panel) => panel.getAttribute('aria-labelledby') === tab.id && isVisible(panel))
+    : null
+  if (labelledPanel) return labelledPanel
+
+  const visiblePanels = [...document.querySelectorAll('[role="tabpanel"]')].filter(isVisible)
+  if (visiblePanels.length === 1) return visiblePanels[0]
+
+  const visibleRoots = [...new Set([
+    ...document.querySelectorAll('[data-testid="favorites-content"]'),
+    ...document.querySelectorAll('.collection-list'),
+    ...document.querySelectorAll('.feeds-container'),
+  ])].filter(isVisible)
+  return visibleRoots.length === 1 ? visibleRoots[0] : null
+}
+
+function collectCardElements(root, pageUrl) {
   const cards = new Set()
   const knownCards = new Set()
   for (const selector of CARD_SELECTORS) {
-    for (const card of document.querySelectorAll(selector)) {
+    for (const card of root.querySelectorAll(selector)) {
       cards.add(card)
       knownCards.add(card)
     }
   }
 
-  const postLinks = [...document.querySelectorAll('a[href]')]
+  const postLinks = [...root.querySelectorAll('a[href]')]
     .filter((link) => isVisible(link) && isPostLink(link.href || link.getAttribute('href'), pageUrl))
   let fallbackContainers = 0
   for (const link of postLinks) {
@@ -325,8 +360,10 @@ function isVisible(element) {
   let current = element
   while (current) {
     const style = String(current.getAttribute?.('style') || '').toLowerCase()
+    const computedStyle = current.ownerDocument?.defaultView?.getComputedStyle?.(current)
     if (current.hasAttribute?.('hidden') || current.getAttribute?.('aria-hidden') === 'true') return false
     if (/display\s*:\s*none|visibility\s*:\s*hidden/u.test(style)) return false
+    if (computedStyle?.display === 'none' || computedStyle?.visibility === 'hidden') return false
     current = current.parentElement
   }
   return true

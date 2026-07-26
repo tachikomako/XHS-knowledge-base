@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Collection, Connection, Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { changeItemLifecycle, getItem, searchItems, updateItem } from './api/items'
+import { changeItemLifecycle, getItem, permanentlyDeleteItem, searchItems, updateItem } from './api/items'
 import type { CaptureLevel, KnowledgeItem, LifecycleStatus } from './api/items'
 import {
   createCategory,
@@ -315,6 +315,29 @@ async function changeLifecycle(action: 'archive' | 'trash' | 'restore') {
   }
 }
 
+async function permanentlyDelete() {
+  if (!selectedItem.value) return
+  try {
+    await ElMessageBox.confirm('此操作会从数据库中删除该条目，且无法恢复。', '永久删除？', {
+      confirmButtonText: '永久删除',
+      cancelButtonText: '取消',
+      type: 'error',
+    })
+    detailSaving.value = true
+    await permanentlyDeleteItem(selectedItem.value.id)
+    drawerVisible.value = false
+    selectedItem.value = null
+    ElMessage.success('已永久删除')
+    await Promise.all([loadItems(), loadMetadata()])
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(error instanceof Error ? error.message : '永久删除失败')
+    }
+  } finally {
+    detailSaving.value = false
+  }
+}
+
 function replaceItem(updated: KnowledgeItem) {
   const index = items.value.findIndex((item) => item.id === updated.id)
   if (index >= 0) items.value[index] = updated
@@ -411,6 +434,7 @@ function replaceItem(updated: KnowledgeItem) {
       :tags="tags"
       @save="saveDetails"
       @lifecycle="changeLifecycle"
+      @permanent-delete="permanentlyDelete"
     />
 
     <TaxonomyDialog
