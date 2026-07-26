@@ -1,4 +1,4 @@
-export const EXTRACTOR_VERSION = 'xhs-dom-3'
+export const EXTRACTOR_VERSION = 'xhs-dom-4'
 
 const POST_PATH_PATTERN = /^\/(?:explore|discovery\/item)\/([^/?#]+)/u
 const PROFILE_PATH_PATTERN = /^\/user\/profile\/[^/?#]+/u
@@ -64,14 +64,20 @@ export function detectPage(url, document) {
     return {
       pageType: 'CURRENT_POST',
       sourceItemId: match[1] || null,
+      canClip: true,
+      canBatch: false,
+      postCount: 1,
     }
   }
 
   if (PROFILE_PATH_PATTERN.test(parsed.pathname) && findActiveFavoritesTab(document)) {
-    return { pageType: 'FAVORITES_PAGE' }
+    const root = findFavoritesRoot(document)
+    const postCount = root ? countPostLinks(root, url) : 0
+    return { pageType: 'FAVORITES_PAGE', canClip: false, canBatch: postCount > 1, postCount }
   }
 
-  return { pageType: 'UNSUPPORTED', reason: '请打开小红书帖子或“我的收藏”页面' }
+  const postCount = countPostLinks(document, url)
+  return { pageType: 'FEED', canClip: false, canBatch: postCount > 1, postCount }
 }
 
 export function extractFavoritesPage(document, pageUrl, capturedAt = new Date()) {
@@ -120,6 +126,8 @@ export function extractFavoritesPage(document, pageUrl, capturedAt = new Date())
 
   return {
     pageType: 'FAVORITES_PAGE',
+    canClip: false,
+    canBatch: items.length > 1,
     extractorVersion: EXTRACTOR_VERSION,
     warnings,
     stats: {
@@ -157,6 +165,8 @@ export function extractCurrentPost(document, pageUrl, capturedAt = new Date()) {
 
   return {
     pageType: 'CURRENT_POST',
+    canClip: true,
+    canBatch: false,
     extractorVersion: EXTRACTOR_VERSION,
     warnings,
     item: {
@@ -259,6 +269,14 @@ function collectCardElements(root, pageUrl) {
     postLinks: postLinks.length,
     fallbackContainers,
   }
+}
+
+function countPostLinks(root, pageUrl) {
+  const ids = [...root.querySelectorAll('a[href]')]
+    .filter((link) => isVisible(link))
+    .map((link) => safeUrl(link.href || link.getAttribute('href'), pageUrl)?.pathname.match(POST_PATH_PATTERN)?.[1])
+    .filter(Boolean)
+  return new Set(ids).size
 }
 
 function inferCardContainer(link, pageUrl) {
