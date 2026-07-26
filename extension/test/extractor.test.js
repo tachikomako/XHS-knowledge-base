@@ -4,7 +4,13 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { parseHTML } from 'linkedom'
 
-import { detectPage, ExtractionError, extractCurrentPost, extractFavoritesPage } from '../content/extractor-core.js'
+import {
+  detectPage,
+  detectProfileTab,
+  ExtractionError,
+  extractCurrentPost,
+  extractFavoritesPage,
+} from '../content/extractor-core.js'
 
 const fixtureRoot = new URL('./fixtures/', import.meta.url)
 
@@ -17,7 +23,7 @@ test('extracts a visible current post into the backend contract', async () => {
   )
 
   assert.equal(result.pageType, 'CURRENT_POST')
-  assert.equal(result.extractorVersion, 'xhs-dom-4')
+  assert.equal(result.extractorVersion, 'xhs-dom-5')
   assert.equal(result.canClip, true)
   assert.equal(result.canBatch, false)
   assert.deepEqual(result.warnings, [])
@@ -80,6 +86,47 @@ test('reports feed capabilities without enabling collection sync', () => {
   })
 })
 
+test('detects profile tabs from URL before inspecting DOM', () => {
+  assert.equal(
+    detectProfileTab('https://www.xiaohongshu.com/user/profile/fixture?tab=fav&subTab=note'),
+    'FAVORITE',
+  )
+  assert.equal(
+    detectProfileTab('https://www.xiaohongshu.com/user/profile/fixture?tab=liked&subTab=note'),
+    'LIKED',
+  )
+  assert.equal(
+    detectProfileTab('https://www.xiaohongshu.com/user/profile/fixture?tab=fav&subTab=board'),
+    null,
+  )
+})
+
+test('recognizes liked profile pages without enabling sync', () => {
+  const document = parseHTML(`
+    <html><body><a href="/explore/liked-001">点赞帖子</a></body></html>
+  `).document
+  assert.deepEqual(
+    detectPage('https://www.xiaohongshu.com/user/profile/fixture?tab=liked&subTab=note', document),
+    { pageType: 'LIKED', canClip: true, canBatch: false, postCount: 1 },
+  )
+})
+
+test('extracts URL-confirmed favorites without a fixed container', () => {
+  const document = parseHTML(`
+    <html><body><main>
+      <a href="/explore/url-favorite-001" title="收藏一"></a>
+      <a href="/explore/url-favorite-002" title="收藏二"></a>
+    </main></body></html>
+  `).document
+  const result = extractFavoritesPage(
+    document,
+    'https://www.xiaohongshu.com/user/profile/fixture?tab=fav&subTab=note',
+  )
+
+  assert.equal(result.pageType, 'FAVORITE')
+  assert.deepEqual(result.items.map((item) => item.sourceItemId), ['url-favorite-001', 'url-favorite-002'])
+})
+
 test('extracts and deduplicates loaded cards from the favorites page', async () => {
   const document = await loadFixture('favorites-page.html')
   const result = extractFavoritesPage(
@@ -88,8 +135,8 @@ test('extracts and deduplicates loaded cards from the favorites page', async () 
     new Date('2026-07-25T05:00:00.000Z'),
   )
 
-  assert.equal(result.pageType, 'FAVORITES_PAGE')
-  assert.equal(result.extractorVersion, 'xhs-dom-4')
+  assert.equal(result.pageType, 'FAVORITE')
+  assert.equal(result.extractorVersion, 'xhs-dom-5')
   assert.equal(result.canClip, false)
   assert.equal(result.canBatch, true)
   assert.deepEqual(result.stats, {
@@ -121,7 +168,7 @@ test('extracts and deduplicates loaded cards from the favorites page', async () 
 test('detects an active favorites tab even when the URL has no tab query', async () => {
   const document = await loadFixture('favorites-page.html')
   assert.deepEqual(detectPage('https://www.xiaohongshu.com/user/profile/fixture-user', document), {
-    pageType: 'FAVORITES_PAGE',
+    pageType: 'FAVORITE',
     canClip: false,
     canBatch: true,
     postCount: 2,

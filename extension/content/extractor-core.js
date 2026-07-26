@@ -1,4 +1,4 @@
-export const EXTRACTOR_VERSION = 'xhs-dom-4'
+export const EXTRACTOR_VERSION = 'xhs-dom-5'
 
 const POST_PATH_PATTERN = /^\/(?:explore|discovery\/item)\/([^/?#]+)/u
 const PROFILE_PATH_PATTERN = /^\/user\/profile\/[^/?#]+/u
@@ -70,23 +70,39 @@ export function detectPage(url, document) {
     }
   }
 
-  if (PROFILE_PATH_PATTERN.test(parsed.pathname) && findActiveFavoritesTab(document)) {
-    const root = findFavoritesRoot(document)
+  const profileTab = detectProfileTab(parsed)
+  if (profileTab === 'FAVORITE' || (PROFILE_PATH_PATTERN.test(parsed.pathname) && findActiveFavoritesTab(document))) {
+    const root = findFavoritesRoot(document) || (profileTab === 'FAVORITE' ? document : null)
     const postCount = root ? countPostLinks(root, url) : 0
-    return { pageType: 'FAVORITES_PAGE', canClip: false, canBatch: postCount > 1, postCount }
+    return { pageType: 'FAVORITE', canClip: false, canBatch: postCount > 1, postCount }
+  }
+  if (profileTab === 'LIKED') {
+    const postCount = countPostLinks(document, url)
+    return { pageType: 'LIKED', canClip: true, canBatch: postCount > 1, postCount }
   }
 
   const postCount = countPostLinks(document, url)
   return { pageType: 'FEED', canClip: false, canBatch: postCount > 1, postCount }
 }
 
+export function detectProfileTab(value) {
+  const parsed = value instanceof URL ? value : safeUrl(value)
+  if (!parsed || !PROFILE_PATH_PATTERN.test(parsed.pathname)) return null
+  const tab = parsed.searchParams.get('tab')?.toLowerCase()
+  const subTab = parsed.searchParams.get('subTab')?.toLowerCase()
+  if (subTab !== 'note') return null
+  if (tab === 'fav') return 'FAVORITE'
+  if (tab === 'liked') return 'LIKED'
+  return null
+}
+
 export function extractFavoritesPage(document, pageUrl, capturedAt = new Date()) {
   const detection = detectPage(pageUrl, document)
-  if (detection.pageType !== 'FAVORITES_PAGE') {
+  if (detection.pageType !== 'FAVORITE') {
     throw new ExtractionError('UNSUPPORTED_PAGE', detection.reason)
   }
 
-  const root = findFavoritesRoot(document)
+  const root = findFavoritesRoot(document) || (detectProfileTab(pageUrl) === 'FAVORITE' ? document : null)
   if (!root) {
     throw new ExtractionError(
       'FAVORITES_ROOT_NOT_FOUND',
@@ -125,7 +141,7 @@ export function extractFavoritesPage(document, pageUrl, capturedAt = new Date())
   if (candidates.length > 500) warnings.push('当前页面卡片超过 500 条，本次只处理前 500 条')
 
   return {
-    pageType: 'FAVORITES_PAGE',
+    pageType: 'FAVORITE',
     canClip: false,
     canBatch: items.length > 1,
     extractorVersion: EXTRACTOR_VERSION,
