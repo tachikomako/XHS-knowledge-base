@@ -2,8 +2,8 @@
 <html lang="zh-CN">
   <head><title>示例用户的收藏 - 小红书</title></head>
   <body>
-    <nav><button role="tab">笔记</button><button role="tab" aria-selected="true">收藏</button></nav>
-    <main class="feeds-container">
+    <nav><button role="tab">笔记</button><button role="tab" aria-selected="true" aria-controls="favorites-panel">收藏</button></nav>
+    <main id="favorites-panel" role="tabpanel" class="feeds-container">
       <section class="note-item">
         <a class="title" href="/explore/favorite-001">Java Agent 入门资料</a>
         <a class="cover" href="/explore/favorite-001?xsec_token=fixture-token&amp;xsec_source=pc_collect">

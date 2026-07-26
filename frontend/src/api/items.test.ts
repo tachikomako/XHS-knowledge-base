@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { changeItemLifecycle, searchItems, updateItem } from './items'
+import { changeItemLifecycle, permanentlyDeleteItem, searchItems, updateItem } from './items'
 
 describe('knowledge item API', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -32,6 +32,7 @@ describe('knowledge item API', () => {
 
     await updateItem('item/1', { summary: '摘要', userNote: null })
     await changeItemLifecycle('item/1', 'trash')
+    await permanentlyDeleteItem('item/1')
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/items/item%2F1', expect.objectContaining({
       method: 'PATCH',
@@ -39,6 +40,9 @@ describe('knowledge item API', () => {
     }))
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/items/item%2F1/trash', expect.objectContaining({
       method: 'POST',
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/v1/items/item%2F1', expect.objectContaining({
+      method: 'DELETE',
     }))
   })
 

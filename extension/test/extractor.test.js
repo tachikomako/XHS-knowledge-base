@@ -102,6 +102,24 @@ test('detects an active favorites tab even when the URL has no tab query', async
   })
 })
 
+test('extracts only the active favorites panel', async () => {
+  const document = await loadFixture('favorites-page-isolated.html')
+  const result = extractFavoritesPage(
+    document,
+    'https://www.xiaohongshu.com/user/profile/fixture-user',
+  )
+
+  assert.deepEqual(result.items.map((item) => item.sourceItemId), ['favorite-only-001'])
+})
+
+test('fails closed when the active favorites panel cannot be located', async () => {
+  const document = await loadFixture('favorites-page-unresolved.html')
+  assert.throws(
+    () => extractFavoritesPage(document, 'https://www.xiaohongshu.com/user/profile/fixture-user'),
+    (error) => error instanceof ExtractionError && error.code === 'FAVORITES_ROOT_NOT_FOUND',
+  )
+})
+
 test('infers card boundaries from post links when Xiaohongshu class names change', async () => {
   const document = await loadFixture('favorites-page-unknown-layout.html')
   const result = extractFavoritesPage(
@@ -122,7 +140,7 @@ test('infers card boundaries from post links when Xiaohongshu class names change
 
 test('uses a post link itself when the page has no card wrapper', () => {
   const document = parseHTML(`
-    <html><body><main>
+    <html><body><button role="tab" aria-selected="true" aria-controls="favorites-panel">收藏</button><main id="favorites-panel" role="tabpanel">
       <a href="/explore/direct-001" title="直接链接一"><img /></a>
       <a href="/explore/direct-002" title="直接链接二"><img /></a>
     </main></body></html>

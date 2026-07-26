@@ -152,6 +152,20 @@ public class KnowledgeItemService {
         return toView(item);
     }
 
+    @Transactional
+    public void permanentlyDelete(String id) {
+        KnowledgeItemEntity item = requireItem(id);
+        if (!"TRASHED".equals(item.getLifecycleStatus())) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "ITEM_NOT_TRASHED",
+                    "Only items in trash can be permanently deleted"
+            );
+        }
+        jdbcTemplate.update("DELETE FROM knowledge_item_tags WHERE item_id = ?", id);
+        itemMapper.deleteById(id);
+    }
+
     private KnowledgeItemEntity requireItem(String id) {
         KnowledgeItemEntity item = itemMapper.selectById(id);
         if (item == null) {

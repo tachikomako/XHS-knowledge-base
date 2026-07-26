@@ -21,6 +21,7 @@ const emit = defineEmits<{
     tagIds: string[]
   }]
   lifecycle: [action: 'archive' | 'trash' | 'restore']
+  permanentDelete: []
 }>()
 
 const summary = ref('')
@@ -85,7 +86,7 @@ function formatDate(value: string | null) {
       <section class="detail-section">
         <div class="section-heading"><h2>内容快照</h2><span>{{ item.content ? '已保存在本地' : '未采集正文' }}</span></div>
         <p class="source-content">{{ item.content || '当前记录只有卡片信息，可以打开原帖后再次剪藏以升级为正文快照。' }}</p>
-        <a :href="item.originalUrl" target="_blank" rel="noreferrer" class="source-link">
+        <a :href="item.originalUrl" target="_blank" rel="noopener noreferrer" class="source-link">
           <el-icon><Link /></el-icon>查看小红书原帖
         </a>
       </section>
@@ -118,6 +119,7 @@ function formatDate(value: string | null) {
         <el-button v-if="item.lifecycleStatus === 'ACTIVE'" :icon="Upload" @click="$emit('lifecycle', 'archive')">归档</el-button>
         <el-button v-if="item.lifecycleStatus !== 'TRASHED'" type="danger" plain :icon="Delete" @click="$emit('lifecycle', 'trash')">移入回收站</el-button>
         <el-button v-if="item.lifecycleStatus !== 'ACTIVE'" type="success" plain :icon="RefreshLeft" @click="$emit('lifecycle', 'restore')">恢复到知识库</el-button>
+        <el-button v-if="item.lifecycleStatus === 'TRASHED'" type="danger" :icon="Delete" :loading="saving" @click="$emit('permanentDelete')">永久删除</el-button>
       </section>
     </article>
   </el-drawer>

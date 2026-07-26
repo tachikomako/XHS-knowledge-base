@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head><title>收藏区域隔离测试 - 小红书</title></head>
+  <body>
+    <nav>
+      <button id="posts-tab" role="tab" aria-selected="false" aria-controls="posts-panel">笔记</button>
+      <button id="likes-tab" role="tab" aria-selected="false" aria-controls="likes-panel">点赞</button>
+      <button id="favorites-tab" role="tab" aria-selected="true" aria-controls="favorites-panel">收藏</button>
+    </nav>
+    <section id="posts-panel" role="tabpanel" aria-labelledby="posts-tab" hidden>
+      <article class="note-item"><a href="/explore/private-post-001" title="个人发布"></a></article>
+    </section>
+    <section id="likes-panel" role="tabpanel" aria-labelledby="likes-tab" hidden>
+      <article class="note-item"><a href="/explore/liked-post-001" title="点赞帖子"></a></article>
+    </section>
+    <section id="favorites-panel" role="tabpanel" aria-labelledby="favorites-tab">
+      <article class="note-item">
+        <a href="/explore/favorite-only-001?xsec_token=fake-collect-token&amp;xsec_source=pc_collect" title="仅收藏帖子"></a>
+      </article>
+    </section>
+  </body>
+</html>

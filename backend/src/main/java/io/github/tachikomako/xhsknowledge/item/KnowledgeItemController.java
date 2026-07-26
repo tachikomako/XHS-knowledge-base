@@ -1,5 +1,7 @@
 package io.github.tachikomako.xhsknowledge.item;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -8,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.ResponseStatus;
 
 @RestController
 @RequestMapping("/api/v1/items")
@@ -72,5 +75,11 @@ public class KnowledgeItemController {
     @PostMapping("/{id}/restore")
     public KnowledgeItemView restore(@PathVariable String id) {
         return itemService.changeLifecycle(id, "ACTIVE");
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void permanentlyDelete(@PathVariable String id) {
+        itemService.permanentlyDelete(id);
     }
 }
