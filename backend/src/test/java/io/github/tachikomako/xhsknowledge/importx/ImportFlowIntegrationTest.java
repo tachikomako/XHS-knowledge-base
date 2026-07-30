@@ -13,7 +13,6 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -95,7 +94,7 @@ class ImportFlowIntegrationTest {
     }
 
     @Test
-    void restoresTrashedItemsAndAllowsPermanentDeletionBeforeReimport() throws Exception {
+    void restoresTrashedItemsBeforeReimportWithoutPermanentDeletion() throws Exception {
         String categoryId = "category-fixture";
         String tagId = "tag-fixture";
         jdbcTemplate.update(
@@ -130,10 +129,6 @@ class ImportFlowIntegrationTest {
                 .andExpect(jsonPath("$.tagIds[0]").value(tagId))
                 .andExpect(jsonPath("$.manualMetadataLocked").value(true));
 
-        mockMvc.perform(delete("/api/v1/items/{id}", itemId))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("ITEM_NOT_TRASHED"));
-
         mockMvc.perform(post("/api/v1/items/{id}/trash", itemId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.lifecycleStatus").value("TRASHED"));
@@ -164,13 +159,9 @@ class ImportFlowIntegrationTest {
                 .andExpect(jsonPath("$.categoryId").value(categoryId))
                 .andExpect(jsonPath("$.tagIds[0]").value(tagId));
 
-        mockMvc.perform(post("/api/v1/items/{id}/trash", itemId)).andExpect(status().isOk());
-        mockMvc.perform(delete("/api/v1/items/{id}", itemId)).andExpect(status().isNoContent());
-        mockMvc.perform(get("/api/v1/items/{id}", itemId)).andExpect(status().isNotFound());
-
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM knowledge_item_tags WHERE item_id = ?", Integer.class, itemId
-        )).isZero();
+        )).isOne();
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM categories WHERE id = ?", Integer.class, categoryId
         )).isOne();
@@ -183,10 +174,10 @@ class ImportFlowIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(importJson("batch-after-delete", "DETAIL", "重新导入")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.created").value(1))
+                .andExpect(jsonPath("$.skipped").value(1))
                 .andReturn().getResponse().getContentAsString();
         assertThat(objectMapper.readTree(reimportBody).path("results").path(0).path("itemId").asText())
-                .isNotEqualTo(itemId);
+                .isEqualTo(itemId);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM knowledge_items WHERE source_item_id = 'abc123'", Integer.class
         )).isOne();

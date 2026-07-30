@@ -39,6 +39,7 @@ export interface ItemSearchParams {
   q?: string
   categoryId?: string
   tagId?: string
+  sourceType?: string
   lifecycleStatus?: LifecycleStatus
   captureLevel?: CaptureLevel | ''
   page?: number
@@ -61,6 +62,7 @@ export async function searchItems(
   appendIfPresent(query, 'q', params.q?.trim())
   appendIfPresent(query, 'categoryId', params.categoryId)
   appendIfPresent(query, 'tagId', params.tagId)
+  appendIfPresent(query, 'sourceType', params.sourceType)
   appendIfPresent(query, 'lifecycleStatus', params.lifecycleStatus)
   appendIfPresent(query, 'captureLevel', params.captureLevel)
   appendIfPresent(query, 'page', params.page ?? 1)
@@ -91,17 +93,6 @@ export function bulkTrashItems(categoryId?: string): Promise<{ affected: number 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(categoryId ? { scope: 'CATEGORY', categoryId } : { scope: 'ALL' }),
   })
-}
-
-export async function permanentlyDeleteItem(id: string): Promise<void> {
-  const response = await fetch(`/api/v1/items/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    headers: { Accept: 'application/json' },
-  })
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { message?: string } | null
-    throw new Error(body?.message || `后端返回 ${response.status}`)
-  }
 }
 
 async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T> {

@@ -62,9 +62,16 @@ public class MetadataController {
         return metadataService.updateTag(id, request);
     }
 
+    @PostMapping("/tags/{sourceTagId}/merge")
+    public TagView mergeTag(@PathVariable String sourceTagId, @RequestBody MergeTagRequest request) {
+        return metadataService.mergeTag(sourceTagId, request.targetTagId());
+    }
+
     @DeleteMapping("/tags/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteTag(@PathVariable String id) {
         metadataService.deleteTag(id);
     }
+
+    public record MergeTagRequest(String targetTagId) { }
 }

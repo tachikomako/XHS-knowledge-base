@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Collection, Connection, Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { bulkTrashItems, changeItemLifecycle, getItem, permanentlyDeleteItem, searchItems, updateItem } from './api/items'
+import { bulkTrashItems, changeItemLifecycle, getItem, searchItems, updateItem } from './api/items'
 import type { CaptureLevel, KnowledgeItem, LifecycleStatus } from './api/items'
 import {
   createCategory,
@@ -11,6 +11,7 @@ import {
   deleteTag,
   fetchCategories,
   fetchTags,
+  mergeTag as mergeTagApi,
   updateCategory,
   updateTag,
 } from './api/metadata'
@@ -32,6 +33,7 @@ const lifecycleStatus = ref<LifecycleStatus>('ACTIVE')
 const captureLevel = ref<CaptureLevel | ''>('')
 const categoryId = ref('')
 const tagId = ref('')
+const sourceType = ref('')
 const listLoading = ref(false)
 const listError = ref('')
 const drawerVisible = ref(false)
@@ -62,6 +64,12 @@ const categoryNames = computed(() => Object.fromEntries(categories.value.map((ca
     ? `${categories.value.find((parent) => parent.id === category.parentId)?.name || ''} / ${category.name}`
     : category.name,
 ])))
+const categoryTree = computed(() => orderedCategories.value
+  .filter((category) => !category.parentId)
+  .map((category) => ({
+    ...category,
+    children: orderedCategories.value.filter((child) => child.parentId === category.id),
+  })))
 
 const libraryLabel = computed(() => ({
   ACTIVE: '知识库',
@@ -88,7 +96,7 @@ onBeforeUnmount(() => {
   metadataController?.abort()
 })
 
-watch([lifecycleStatus, captureLevel, categoryId, tagId], () => {
+watch([lifecycleStatus, captureLevel, categoryId, tagId, sourceType], () => {
   page.value = 1
   void loadItems()
 })
@@ -104,6 +112,7 @@ async function loadItems() {
       q: appliedQuery.value,
       categoryId: categoryId.value,
       tagId: tagId.value,
+      sourceType: sourceType.value,
       lifecycleStatus: lifecycleStatus.value,
       captureLevel: captureLevel.value,
       page: page.value,
@@ -141,6 +150,10 @@ async function loadMetadata() {
 
 function filterByTag(selectedTagId: string) {
   tagId.value = selectedTagId
+}
+
+function selectCategory(selectedCategoryId: string) {
+  categoryId.value = selectedCategoryId
 }
 
 function applySearch() {
@@ -226,6 +239,21 @@ async function editCategory(category: Category) {
   }
 }
 
+async function moveCategory(category: Category, direction: -1 | 1) {
+  const siblings = orderedCategories.value.filter((candidate) => candidate.parentId === category.parentId)
+  const index = siblings.findIndex((candidate) => candidate.id === category.id)
+  const target = siblings[index + direction]
+  if (!target) return
+  const reordered = [...siblings]
+  reordered.splice(index, 1)
+  reordered.splice(index + direction, 0, category)
+  await mutateMetadata(() => Promise.all(reordered.map((entry, nextIndex) => updateCategory(entry.id, {
+    name: entry.name,
+    parentId: entry.parentId,
+    sortOrder: nextIndex * 10,
+  }))), '分类排序已更新')
+}
+
 async function editTag(tag: Tag) {
   try {
     const result = await ElMessageBox.prompt('请输入新的标签名称', '重命名标签', {
@@ -236,6 +264,22 @@ async function editTag(tag: Tag) {
       cancelButtonText: '取消',
     })
     await mutateMetadata(() => updateTag(tag.id, result.value), '标签已更新')
+  } catch (error) {
+    handleDialogError(error)
+  }
+}
+
+async function mergeTag(sourceTag: Tag, targetTagId: string) {
+  const targetTag = tags.value.find((tag) => tag.id === targetTagId)
+  if (!targetTag) return
+  try {
+    await ElMessageBox.confirm(`这会把 #${sourceTag.name} 的帖子关联合并到 #${targetTag.name}，并删除源标签。`, '合并标签？', {
+      confirmButtonText: '合并',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    const merged = await mutateMetadata(() => mergeTagApi(sourceTag.id, targetTagId), '标签已合并')
+    if (merged && tagId.value === sourceTag.id) tagId.value = targetTagId
   } catch (error) {
     handleDialogError(error)
   }
@@ -345,29 +389,6 @@ async function changeLifecycle(action: 'archive' | 'trash' | 'restore') {
   }
 }
 
-async function permanentlyDelete() {
-  if (!selectedItem.value) return
-  try {
-    await ElMessageBox.confirm('此操作会从数据库中删除该条目，且无法恢复。', '永久删除？', {
-      confirmButtonText: '永久删除',
-      cancelButtonText: '取消',
-      type: 'error',
-    })
-    detailSaving.value = true
-    await permanentlyDeleteItem(selectedItem.value.id)
-    drawerVisible.value = false
-    selectedItem.value = null
-    ElMessage.success('已永久删除')
-    await Promise.all([loadItems(), loadMetadata()])
-  } catch (error) {
-    if (error !== 'cancel' && error !== 'close') {
-      ElMessage.error(error instanceof Error ? error.message : '永久删除失败')
-    }
-  } finally {
-    detailSaving.value = false
-  }
-}
-
 function replaceItem(updated: KnowledgeItem) {
   const index = items.value.findIndex((item) => item.id === updated.id)
   if (index >= 0) items.value[index] = updated
@@ -412,6 +433,10 @@ function replaceItem(updated: KnowledgeItem) {
           <el-option label="正文快照" value="DETAIL" />
           <el-option label="链接卡片" value="CARD" />
         </el-select>
+        <el-select v-model="sourceType" size="large" aria-label="来源筛选" style="width: 150px">
+          <el-option label="全部来源" value="" />
+          <el-option label="小红书" value="XIAOHONGSHU" />
+        </el-select>
         <el-select v-model="categoryId" clearable size="large" placeholder="全部分类" aria-label="分类筛选" style="width: 170px">
           <el-option
             v-for="category in orderedCategories"
@@ -431,29 +456,52 @@ function replaceItem(updated: KnowledgeItem) {
       <template #default><el-button text @click="loadItems">重新加载</el-button></template>
     </el-alert>
 
-    <section v-loading="listLoading" class="library-grid" :class="{ empty: !items.length }" aria-live="polite">
-      <KnowledgeCard
-        v-for="item in items"
-        :key="item.id"
-        :item="item"
-        :category-name="item.categoryId ? categoryNames[item.categoryId] || null : null"
-        :tag-names="tagNames"
-        @open="openItem"
-        @filter-tag="filterByTag"
-      />
-      <el-empty v-if="!listLoading && !items.length && !listError" :description="emptyDescription" />
-    </section>
+    <section class="library-body">
+      <aside class="category-sidebar" aria-label="分类树">
+        <button type="button" :class="{ active: !categoryId }" @click="selectCategory('')">全部分类</button>
+        <div v-for="category in categoryTree" :key="category.id" class="category-branch">
+          <button type="button" :class="{ active: categoryId === category.id }" @click="selectCategory(category.id)">
+            <span>{{ category.name }}</span><small>{{ category.itemCount }}</small>
+          </button>
+          <button
+            v-for="child in category.children"
+            :key="child.id"
+            type="button"
+            class="child"
+            :class="{ active: categoryId === child.id }"
+            @click="selectCategory(child.id)"
+          >
+            <span>{{ child.name }}</span><small>{{ child.itemCount }}</small>
+          </button>
+        </div>
+      </aside>
 
-    <el-pagination
-      v-if="total > PAGE_SIZE"
-      class="pagination"
-      background
-      layout="prev, pager, next"
-      :current-page="page"
-      :page-size="PAGE_SIZE"
-      :total="total"
-      @current-change="changePage"
-    />
+      <div class="library-results">
+        <section v-loading="listLoading" class="library-grid" :class="{ empty: !items.length }" aria-live="polite">
+          <KnowledgeCard
+            v-for="item in items"
+            :key="item.id"
+            :item="item"
+            :category-name="item.categoryId ? categoryNames[item.categoryId] || null : null"
+            :tag-names="tagNames"
+            @open="openItem"
+            @filter-tag="filterByTag"
+          />
+          <el-empty v-if="!listLoading && !items.length && !listError" :description="emptyDescription" />
+        </section>
+
+        <el-pagination
+          v-if="total > PAGE_SIZE"
+          class="pagination"
+          background
+          layout="prev, pager, next"
+          :current-page="page"
+          :page-size="PAGE_SIZE"
+          :total="total"
+          @current-change="changePage"
+        />
+      </div>
+    </section>
 
     <KnowledgeDetailDrawer
       v-model="drawerVisible"
@@ -464,7 +512,6 @@ function replaceItem(updated: KnowledgeItem) {
       :tags="tags"
       @save="saveDetails"
       @lifecycle="changeLifecycle"
-      @permanent-delete="permanentlyDelete"
     />
 
     <TaxonomyDialog
@@ -476,6 +523,8 @@ function replaceItem(updated: KnowledgeItem) {
       @create-tag="addTag"
       @edit-category="editCategory"
       @edit-tag="editTag"
+      @move-category="moveCategory"
+      @merge-tag="mergeTag"
       @delete-category="removeCategory"
       @delete-tag="removeTag"
       @clear-category="clearLibrary"

@@ -35,7 +35,7 @@ The server limits each batch to 50 items. Reusing `clientBatchId` replays the st
 
 ## Items
 
-- `GET /items`: paginated search. Supports `q`, `categoryId`, `tagId`, `sourceType`, `captureLevel`, `lifecycleStatus`, `aiStatus`, `page`, `pageSize`, and `sort`.
+- `GET /items`: paginated search. Supports `q`, `categoryId`, `tagId`, `sourceType`, `captureLevel`, `lifecycleStatus`, `aiStatus`, `page`, `pageSize`, and `sort`. Filtering by a root category includes its direct child categories.
 - `GET /items/{id}`: full saved item.
 - `PATCH /items/{id}`: partial edit of `categoryId`, `tagIds`, `summary`, and `userNote`. JSON `null` clears a field.
 - `POST /items/{id}/archive`: move to archive.
@@ -46,11 +46,11 @@ The server limits each batch to 50 items. Reusing `clientBatchId` replays the st
 ## Categories and tags
 
 - `GET /categories`, `POST /categories`, `PUT /categories/{id}`, `DELETE /categories/{id}`.
-- `GET /tags`, `POST /tags`, `PUT /tags/{id}`, `DELETE /tags/{id}`.
+- `GET /tags`, `POST /tags`, `PUT /tags/{id}`, `POST /tags/{sourceTagId}/merge`, `DELETE /tags/{id}`.
 
 Category requests use `{ "name": "技术", "parentId": null, "sortOrder": 0 }`. Only two category levels are supported. A category must have no children or assigned items before deletion.
 
-Tag requests use `{ "name": "AI" }`. A leading `#` is removed and names are deduplicated case-insensitively. Deleting a tag removes its item associations but never deletes knowledge items.
+Tag requests use `{ "name": "AI" }`. A leading `#` is removed and names are deduplicated case-insensitively. Merging a tag uses `{ "targetTagId": "..." }`, copies associations to the target, ignores duplicates, and deletes the source tag. Deleting a tag removes its item associations but never deletes knowledge items.
 
 Errors use this shape:
 

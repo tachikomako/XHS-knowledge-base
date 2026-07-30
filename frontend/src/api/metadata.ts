@@ -46,6 +46,10 @@ export function updateTag(id: string, name: string): Promise<Tag> {
   return requestJson(`/api/v1/tags/${encodeURIComponent(id)}`, jsonRequest('PUT', { name }))
 }
 
+export function mergeTag(sourceTagId: string, targetTagId: string): Promise<Tag> {
+  return requestJson(`/api/v1/tags/${encodeURIComponent(sourceTagId)}/merge`, jsonRequest('POST', { targetTagId }))
+}
+
 export function deleteTag(id: string): Promise<void> {
   return requestVoid(`/api/v1/tags/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
