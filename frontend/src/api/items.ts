@@ -85,6 +85,14 @@ export function changeItemLifecycle(id: string, action: 'archive' | 'trash' | 'r
   return requestJson(`/api/v1/items/${encodeURIComponent(id)}/${action}`, { method: 'POST' })
 }
 
+export function bulkTrashItems(categoryId?: string): Promise<{ affected: number }> {
+  return requestJson('/api/v1/items/bulk-trash', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(categoryId ? { scope: 'CATEGORY', categoryId } : { scope: 'ALL' }),
+  })
+}
+
 export async function permanentlyDeleteItem(id: string): Promise<void> {
   const response = await fetch(`/api/v1/items/${encodeURIComponent(id)}`, {
     method: 'DELETE',

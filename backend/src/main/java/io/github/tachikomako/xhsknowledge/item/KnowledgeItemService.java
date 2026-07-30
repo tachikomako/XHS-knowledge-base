@@ -153,6 +153,42 @@ public class KnowledgeItemService {
     }
 
     @Transactional
+    public int bulkTrash(String scope, String categoryId) {
+        String timestamp = now();
+        if ("ALL".equals(scope)) {
+            if (categoryId != null) {
+                throw badRequest("INVALID_BULK_SCOPE", "categoryId must be omitted when scope is ALL");
+            }
+            return jdbcTemplate.update(
+                    "UPDATE knowledge_items SET lifecycle_status = 'TRASHED', updated_at = ? "
+                            + "WHERE lifecycle_status <> 'TRASHED'",
+                    timestamp
+            );
+        }
+
+        String normalizedCategoryId = trimToNull(categoryId);
+        if (!"CATEGORY".equals(scope) || normalizedCategoryId == null) {
+            throw badRequest("INVALID_BULK_SCOPE", "scope must be ALL or CATEGORY with a categoryId");
+        }
+        if (!categoryExists(normalizedCategoryId)) {
+            throw badRequest("UNKNOWN_CATEGORY", "categoryId does not exist");
+        }
+        return jdbcTemplate.update(
+                """
+                UPDATE knowledge_items
+                SET lifecycle_status = 'TRASHED', updated_at = ?
+                WHERE lifecycle_status <> 'TRASHED'
+                  AND (category_id = ? OR category_id IN (
+                    SELECT id FROM categories WHERE parent_id = ?
+                  ))
+                """,
+                timestamp,
+                normalizedCategoryId,
+                normalizedCategoryId
+        );
+    }
+
+    @Transactional
     public void permanentlyDelete(String id) {
         KnowledgeItemEntity item = requireItem(id);
         if (!"TRASHED".equals(item.getLifecycleStatus())) {

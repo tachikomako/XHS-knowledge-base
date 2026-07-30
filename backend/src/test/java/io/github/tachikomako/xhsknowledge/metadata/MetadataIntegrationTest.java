@@ -106,6 +106,49 @@ class MetadataIntegrationTest {
                 .andExpect(jsonPath("$.tagIds").isEmpty());
     }
 
+    @Test
+    void bulkTrashSupportsCategoryTreesAndTheWholeLibrary() throws Exception {
+        String rootId = createCategory("学习", null);
+        String childId = createCategory("英语", rootId);
+        String otherId = createCategory("其他", null);
+        String childItemId = importItem("bulk-child-batch", "bulkchild123");
+        String otherItemId = importItem("bulk-other-batch", "bulkother123");
+
+        mockMvc.perform(patch("/api/v1/items/{id}", childItemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"categoryId\":\"%s\"}".formatted(childId)))
+                .andExpect(status().isOk());
+        mockMvc.perform(patch("/api/v1/items/{id}", otherItemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"categoryId\":\"%s\"}".formatted(otherId)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/items/bulk-trash")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"scope\":\"CATEGORY\",\"categoryId\":\"%s\"}".formatted(rootId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.affected").value(1));
+        assertThat(lifecycleOf(childItemId)).isEqualTo("TRASHED");
+        assertThat(lifecycleOf(otherItemId)).isEqualTo("ACTIVE");
+
+        mockMvc.perform(post("/api/v1/items/bulk-trash")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"scope\":\"ALL\",\"categoryId\":\"%s\"}".formatted(rootId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_BULK_SCOPE"));
+
+        mockMvc.perform(post("/api/v1/items/bulk-trash")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"scope\":\"ALL\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.affected").value(1));
+        mockMvc.perform(post("/api/v1/items/bulk-trash")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"scope\":\"ALL\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.affected").value(0));
+    }
+
     private String createCategory(String name, String parentId) throws Exception {
         var request = objectMapper.createObjectNode().put("name", name).put("sortOrder", 0);
         if (parentId == null) request.putNull("parentId"); else request.put("parentId", parentId);
@@ -118,13 +161,17 @@ class MetadataIntegrationTest {
     }
 
     private String importItem() throws Exception {
+        return importItem("metadata-test-batch", "metadata123");
+    }
+
+    private String importItem(String batchId, String sourceId) throws Exception {
         JsonNode request = objectMapper.readTree("""
                 {
-                  "clientBatchId": "metadata-test-batch",
+                  "clientBatchId": "%s",
                   "captureMode": "CURRENT_POST",
                   "extractorVersion": "test-1",
                   "items": [{
-                    "url": "https://www.xiaohongshu.com/explore/metadata123",
+                    "url": "https://www.xiaohongshu.com/explore/%s",
                     "title": "AI 英语学习",
                     "author": "示例作者",
                     "text": "脱敏正文",
@@ -133,7 +180,7 @@ class MetadataIntegrationTest {
                     "capturedAt": "2026-07-25T12:00:00+08:00"
                   }]
                 }
-                """);
+                """.formatted(batchId, sourceId));
         String body = mockMvc.perform(post("/api/v1/imports/xiaohongshu")
                         .header("X-Extension-Token", "test-extension-token")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -141,5 +188,13 @@ class MetadataIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("results").path(0).path("itemId").asText();
+    }
+
+    private String lifecycleOf(String itemId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT lifecycle_status FROM knowledge_items WHERE id = ?",
+                String.class,
+                itemId
+        );
     }
 }

@@ -1,4 +1,5 @@
 import { createImportSummary, mergeImportResult, splitImportBatches } from './batch-core.js'
+import { collectAccessContextsFromPageState } from '../content/access-context.js'
 
 const DEFAULT_SETTINGS = Object.freeze({
   backendUrl: 'http://127.0.0.1:8080',
@@ -11,11 +12,13 @@ chrome.runtime.onInstalled.addListener(async () => {
   await chrome.storage.local.set({ ...DEFAULT_SETTINGS, ...saved })
 })
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const operation = message?.type === 'CHECK_HEALTH'
     ? checkHealth()
     : message?.type === 'IMPORT_XHS_ITEMS'
       ? importItems(message.payload)
+      : message?.type === 'READ_XHS_ACCESS_CONTEXT'
+        ? readAccessContexts(sender)
       : null
 
   if (!operation) return false
@@ -29,6 +32,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   return true
 })
+
+async function readAccessContexts(sender) {
+  if (!sender.tab?.id) return { ok: false, accessContexts: [] }
+  const [{ result = [] } = {}] = await chrome.scripting.executeScript({
+    target: { tabId: sender.tab.id },
+    world: 'MAIN',
+    func: collectAccessContextsFromPageState,
+  })
+  return { ok: true, accessContexts: result }
+}
 
 async function checkHealth() {
   const settings = await chrome.storage.local.get(Object.keys(DEFAULT_SETTINGS))
