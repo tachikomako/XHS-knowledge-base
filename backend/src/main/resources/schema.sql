@@ -73,3 +73,18 @@ CREATE TABLE IF NOT EXISTS import_batches (
     failed_count INTEGER NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS item_ai_suggestions (
+    item_id TEXT NOT NULL,
+    suggestion_type TEXT NOT NULL,
+    value TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (item_id, suggestion_type, value),
+    FOREIGN KEY (item_id) REFERENCES knowledge_items(id) ON DELETE CASCADE
+);

@@ -20,6 +20,8 @@ app:
 
 qwen:
   api-key: ""
+  base-url: http://127.0.0.1:9/v1
+  model: qwen-plus
 
 mybatis-plus:
   configuration:

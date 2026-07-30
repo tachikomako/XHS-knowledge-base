@@ -3,12 +3,15 @@ package io.github.tachikomako.xhsknowledge.importx;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.tachikomako.xhsknowledge.ai.AiOrganizationService;
 import io.github.tachikomako.xhsknowledge.common.ApiException;
 import io.github.tachikomako.xhsknowledge.item.KnowledgeItemEntity;
 import io.github.tachikomako.xhsknowledge.item.KnowledgeItemMapper;
 import io.github.tachikomako.xhsknowledge.source.XiaohongshuUrlNormalizer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.net.URI;
@@ -31,17 +34,20 @@ public class ImportService {
     private final ImportBatchMapper batchMapper;
     private final XiaohongshuUrlNormalizer urlNormalizer;
     private final ObjectMapper objectMapper;
+    private final AiOrganizationService aiOrganizationService;
 
     public ImportService(
             KnowledgeItemMapper itemMapper,
             ImportBatchMapper batchMapper,
             XiaohongshuUrlNormalizer urlNormalizer,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            AiOrganizationService aiOrganizationService
     ) {
         this.itemMapper = itemMapper;
         this.batchMapper = batchMapper;
         this.urlNormalizer = urlNormalizer;
         this.objectMapper = objectMapper;
+        this.aiOrganizationService = aiOrganizationService;
     }
 
     @Transactional
@@ -57,6 +63,7 @@ public class ImportService {
         int updated = 0;
         int skipped = 0;
         int failed = 0;
+        List<String> aiItemIds = new ArrayList<>();
 
         for (int index = 0; index < request.items().size(); index++) {
             XiaohongshuImportRequest.IncomingItem incoming = request.items().get(index);
@@ -64,8 +71,14 @@ public class ImportService {
                 ImportResponse.ItemResult result = upsert(index, incoming);
                 results.add(result);
                 switch (result.status()) {
-                    case "CREATED" -> created++;
-                    case "UPDATED", "RESTORED" -> updated++;
+                    case "CREATED" -> {
+                        created++;
+                        aiItemIds.add(result.itemId());
+                    }
+                    case "UPDATED", "RESTORED" -> {
+                        updated++;
+                        aiItemIds.add(result.itemId());
+                    }
                     default -> skipped++;
                 }
             } catch (ApiException | IllegalArgumentException exception) {
@@ -92,6 +105,7 @@ public class ImportService {
         batch.setFailedCount(failed);
         batch.setCreatedAt(now());
         batchMapper.insert(batch);
+        scheduleAi(aiItemIds);
 
         return new ImportResponse(
                 batchId,
@@ -103,6 +117,16 @@ public class ImportService {
                 failed,
                 List.copyOf(results)
         );
+    }
+
+    private void scheduleAi(List<String> itemIds) {
+        if (itemIds.isEmpty()) return;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                itemIds.forEach(aiOrganizationService::organizeLater);
+            }
+        });
     }
 
     private ImportResponse.ItemResult upsert(

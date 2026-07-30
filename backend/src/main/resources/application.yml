@@ -21,6 +21,8 @@ app:
 
 qwen:
   api-key: ${QWEN_API_KEY:}
+  base-url: ${QWEN_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+  model: ${QWEN_MODEL:qwen-plus}
 
 xhs:
   extension-token: ${XHS_EXTENSION_TOKEN:dev-local-token}
