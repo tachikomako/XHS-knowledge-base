@@ -32,6 +32,7 @@ button, input, textarea { font: inherit; }
 }
 
 .site-header { justify-content: space-between; }
+.header-actions { display: flex; align-items: center; gap: 10px; }
 
 .brand { display: flex; align-items: center; gap: 11px; }
 .brand-mark {
@@ -212,6 +213,21 @@ button, input, textarea { font: inherit; }
 .tag-manager-chip button:hover { color: #a84c3d; background: rgba(255, 255, 255, .7); }
 .tag-manager-chip svg { width: 12px; height: 12px; }
 
+.settings-layout { display: grid; gap: 16px; }
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eee9e0;
+}
+.settings-row h3, .settings-note h3 { margin: 0; font-size: 16px; }
+.settings-row p, .settings-note p { margin: 6px 0 0; color: #817a70; font-size: 12px; line-height: 1.7; }
+.settings-row.compact { padding-bottom: 0; border-bottom: 0; font-size: 13px; }
+.settings-row code { color: #526647; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.settings-note { padding: 14px; border-radius: 10px; background: #f7f3ec; }
+
 @media (max-width: 980px) {
   .search-form { width: 100%; }
   .filter-row { justify-content: space-between; }
@@ -223,6 +239,7 @@ button, input, textarea { font: inherit; }
 @media (max-width: 650px) {
   .page-shell { width: min(100% - 24px, 560px); padding-top: 18px; }
   .site-header { align-items: flex-start; }
+  .header-actions { align-items: flex-end; flex-direction: column; }
   .health-pill { max-width: 150px; }
   .library-heading { align-items: flex-end; padding: 52px 2px 30px; }
   .library-heading p { display: none; }
