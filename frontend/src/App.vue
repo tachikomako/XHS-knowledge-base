@@ -16,8 +16,11 @@ import {
   updateTag,
 } from './api/metadata'
 import type { Category, CategoryInput, Tag } from './api/metadata'
+import { fetchSettings, updateAiSettings } from './api/settings'
+import type { SettingsResponse } from './api/settings'
 import KnowledgeCard from './components/KnowledgeCard.vue'
 import KnowledgeDetailDrawer from './components/KnowledgeDetailDrawer.vue'
+import SettingsDialog from './components/SettingsDialog.vue'
 import TaxonomyDialog from './components/TaxonomyDialog.vue'
 import { useBackendHealth } from './composables/useBackendHealth'
 
@@ -44,10 +47,15 @@ const categories = ref<Category[]>([])
 const tags = ref<Tag[]>([])
 const taxonomyVisible = ref(false)
 const taxonomyLoading = ref(false)
+const settingsVisible = ref(false)
+const settingsLoading = ref(false)
+const settingsSaving = ref(false)
+const settings = ref<SettingsResponse | null>(null)
 
 let listController: AbortController | null = null
 let detailController: AbortController | null = null
 let metadataController: AbortController | null = null
+let settingsController: AbortController | null = null
 
 const tagNames = computed(() => Object.fromEntries(tags.value.map((tag) => [tag.id, tag.name])))
 const orderedCategories = computed(() => {
@@ -94,6 +102,7 @@ onBeforeUnmount(() => {
   listController?.abort()
   detailController?.abort()
   metadataController?.abort()
+  settingsController?.abort()
 })
 
 watch([lifecycleStatus, captureLevel, categoryId, tagId, sourceType], () => {
@@ -145,6 +154,33 @@ async function loadMetadata() {
     ElMessage.error(error instanceof Error ? error.message : '无法加载分类与标签')
   } finally {
     if (metadataController === controller) taxonomyLoading.value = false
+  }
+}
+
+async function loadSettings() {
+  settingsController?.abort()
+  const controller = new AbortController()
+  settingsController = controller
+  settingsLoading.value = true
+  try {
+    settings.value = await fetchSettings(controller.signal)
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return
+    ElMessage.error(error instanceof Error ? error.message : '无法加载设置')
+  } finally {
+    if (settingsController === controller) settingsLoading.value = false
+  }
+}
+
+async function toggleAi(enabled: boolean) {
+  settingsSaving.value = true
+  try {
+    settings.value = await updateAiSettings(enabled)
+    ElMessage.success(enabled ? 'AI 整理已开启' : 'AI 整理已关闭')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '保存设置失败')
+  } finally {
+    settingsSaving.value = false
   }
 }
 
@@ -402,10 +438,13 @@ function replaceItem(updated: KnowledgeItem) {
         <div class="brand-mark"><Collection /></div>
         <div><strong>拾笺</strong><span>XHS KNOWLEDGE</span></div>
       </div>
-      <button class="health-pill" :class="{ online: health }" type="button" @click="checkHealth">
-        <el-icon :class="{ spinning: healthLoading }"><Refresh v-if="healthLoading" /><Connection v-else /></el-icon>
-        <span>{{ health ? '本地服务已连接' : healthError || '后端未连接' }}</span>
-      </button>
+      <div class="header-actions">
+        <button class="health-pill" :class="{ online: health }" type="button" @click="checkHealth">
+          <el-icon :class="{ spinning: healthLoading }"><Refresh v-if="healthLoading" /><Connection v-else /></el-icon>
+          <span>{{ health ? '本地服务已连接' : healthError || '后端未连接' }}</span>
+        </button>
+        <el-button circle :icon="Setting" aria-label="设置" @click="settingsVisible = true" />
+      </div>
     </header>
 
     <section class="library-heading">
@@ -529,6 +568,15 @@ function replaceItem(updated: KnowledgeItem) {
       @delete-tag="removeTag"
       @clear-category="clearLibrary"
       @clear-library="clearLibrary()"
+    />
+
+    <SettingsDialog
+      v-model="settingsVisible"
+      :settings="settings"
+      :loading="settingsLoading"
+      :saving="settingsSaving"
+      @reload="loadSettings"
+      @toggle-ai="toggleAi"
     />
   </main>
 </template>
