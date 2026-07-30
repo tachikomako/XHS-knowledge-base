@@ -54,6 +54,11 @@ public class KnowledgeItemController {
         return itemService.get(id);
     }
 
+    @PostMapping("/bulk-trash")
+    public BulkTrashResponse bulkTrash(@RequestBody BulkTrashRequest request) {
+        return new BulkTrashResponse(itemService.bulkTrash(request.scope(), request.categoryId()));
+    }
+
     @PatchMapping("/{id}")
     public KnowledgeItemView update(
             @PathVariable String id,
@@ -82,4 +87,8 @@ public class KnowledgeItemController {
     public void permanentlyDelete(@PathVariable String id) {
         itemService.permanentlyDelete(id);
     }
+
+    public record BulkTrashRequest(String scope, String categoryId) { }
+
+    public record BulkTrashResponse(int affected) { }
 }

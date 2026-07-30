@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Collection, Connection, Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { changeItemLifecycle, getItem, permanentlyDeleteItem, searchItems, updateItem } from './api/items'
+import { bulkTrashItems, changeItemLifecycle, getItem, permanentlyDeleteItem, searchItems, updateItem } from './api/items'
 import type { CaptureLevel, KnowledgeItem, LifecycleStatus } from './api/items'
 import {
   createCategory,
@@ -255,6 +255,36 @@ async function removeCategory(category: Category) {
   }
 }
 
+async function clearLibrary(category?: Category) {
+  const target = category ? `分类“${categoryNames.value[category.id]}”` : '整个知识库'
+  const confirmation = category ? category.name : '清空知识库'
+  try {
+    await ElMessageBox.prompt(
+      `这会把${target}中的内容移入回收站。请输入“${confirmation}”确认。`,
+      `清空${target}？`,
+      {
+        confirmButtonText: '移入回收站',
+        cancelButtonText: '取消',
+        type: 'warning',
+        inputPattern: new RegExp(`^${escapeRegExp(confirmation)}$`, 'u'),
+        inputErrorMessage: `请输入“${confirmation}”`,
+      },
+    )
+    taxonomyLoading.value = true
+    const result = await bulkTrashItems(category?.id)
+    ElMessage.success(`已将 ${result.affected} 条内容移入回收站`)
+    await Promise.all([loadItems(), loadMetadata()])
+  } catch (error) {
+    handleDialogError(error)
+  } finally {
+    taxonomyLoading.value = false
+  }
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+}
+
 async function removeTag(tag: Tag) {
   try {
     await ElMessageBox.confirm('删除标签会解除帖子关联，但不会删除帖子。', `删除 #${tag.name}？`, {
@@ -448,6 +478,8 @@ function replaceItem(updated: KnowledgeItem) {
       @edit-tag="editTag"
       @delete-category="removeCategory"
       @delete-tag="removeTag"
+      @clear-category="clearLibrary"
+      @clear-library="clearLibrary()"
     />
   </main>
 </template>

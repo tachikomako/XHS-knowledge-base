@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { changeItemLifecycle, permanentlyDeleteItem, searchItems, updateItem } from './items'
+import { bulkTrashItems, changeItemLifecycle, permanentlyDeleteItem, searchItems, updateItem } from './items'
 
 describe('knowledge item API', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -54,5 +54,22 @@ describe('knowledge item API', () => {
     }))
 
     await expect(searchItems()).rejects.toThrow('查询参数无效')
+  })
+
+  it('uses explicit scopes for bulk trash operations', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ affected: 2 }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await bulkTrashItems('category/1')
+    await bulkTrashItems()
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/items/bulk-trash', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ scope: 'CATEGORY', categoryId: 'category/1' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/items/bulk-trash', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ scope: 'ALL' }),
+    }))
   })
 })

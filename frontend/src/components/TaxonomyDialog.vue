@@ -17,6 +17,8 @@ const emit = defineEmits<{
   editTag: [tag: Tag]
   deleteCategory: [category: Category]
   deleteTag: [tag: Tag]
+  clearCategory: [category: Category]
+  clearLibrary: []
 }>()
 
 const categoryName = ref('')
@@ -66,6 +68,7 @@ function categoryLabel(category: Category) {
           <div v-for="category in categories" :key="category.id" class="taxonomy-row">
             <span>{{ categoryLabel(category) }}<small>{{ category.itemCount }} 条</small></span>
             <div>
+              <el-button text type="danger" aria-label="清空此分类" @click="$emit('clearCategory', category)">清空</el-button>
               <el-button text :icon="Edit" aria-label="重命名分类" @click="$emit('editCategory', category)" />
               <el-button text type="danger" :icon="Delete" aria-label="删除分类" @click="$emit('deleteCategory', category)" />
             </div>
@@ -90,5 +93,8 @@ function categoryLabel(category: Category) {
         <el-empty v-else :image-size="60" description="还没有标签" />
       </section>
     </div>
+    <template #footer>
+      <el-button type="danger" plain @click="$emit('clearLibrary')">清空整个知识库</el-button>
+    </template>
   </el-dialog>
 </template>

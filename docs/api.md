@@ -41,6 +41,7 @@ The server limits each batch to 50 items. Reusing `clientBatchId` replays the st
 - `POST /items/{id}/archive`: move to archive.
 - `POST /items/{id}/trash`: hide locally while retaining the source tombstone.
 - `POST /items/{id}/restore`: return to active items.
+- `POST /items/bulk-trash`: move all non-trashed items, or one category subtree, to trash. Body: `{ "scope": "ALL" }` or `{ "scope": "CATEGORY", "categoryId": "..." }`.
 
 ## Categories and tags
 
