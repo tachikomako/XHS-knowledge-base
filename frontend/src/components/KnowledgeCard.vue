@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Calendar, Document, Picture } from '@element-plus/icons-vue'
 import type { KnowledgeItem } from '../api/items'
+import { proxiedImageUrl } from '../api/media'
 
 defineProps<{
   item: KnowledgeItem
@@ -20,7 +21,7 @@ function formatDate(value: string) {
 <template>
   <article class="knowledge-card" tabindex="0" @click="$emit('open', item)" @keyup.enter="$emit('open', item)">
     <div class="card-cover" :class="{ empty: !item.coverUrl }">
-      <el-image v-if="item.coverUrl" :src="item.coverUrl" fit="cover" loading="lazy" referrerpolicy="no-referrer">
+      <el-image v-if="item.coverUrl" :src="proxiedImageUrl(item.coverUrl)" fit="cover" loading="lazy">
         <template #error><el-icon><Picture /></el-icon></template>
       </el-image>
       <el-icon v-else><Document /></el-icon>

@@ -61,6 +61,7 @@ public class ImportService {
         List<ImportResponse.ItemResult> results = new ArrayList<>();
         int created = 0;
         int updated = 0;
+        int restored = 0;
         int skipped = 0;
         int failed = 0;
         List<String> aiItemIds = new ArrayList<>();
@@ -75,8 +76,12 @@ public class ImportService {
                         created++;
                         aiItemIds.add(result.itemId());
                     }
-                    case "UPDATED", "RESTORED" -> {
+                    case "UPDATED" -> {
                         updated++;
+                        aiItemIds.add(result.itemId());
+                    }
+                    case "RESTORED" -> {
+                        restored++;
                         aiItemIds.add(result.itemId());
                     }
                     default -> skipped++;
@@ -100,7 +105,7 @@ public class ImportService {
         batch.setExtractorVersion(request.extractorVersion());
         batch.setReceived(request.items().size());
         batch.setCreatedCount(created);
-        batch.setUpdatedCount(updated);
+        batch.setUpdatedCount(updated + restored);
         batch.setSkippedCount(skipped);
         batch.setFailedCount(failed);
         batch.setCreatedAt(now());
@@ -113,6 +118,7 @@ public class ImportService {
                 request.items().size(),
                 created,
                 updated,
+                restored,
                 skipped,
                 failed,
                 List.copyOf(results)
@@ -298,6 +304,7 @@ public class ImportService {
                 batch.getReceived(),
                 batch.getCreatedCount(),
                 batch.getUpdatedCount(),
+                0,
                 batch.getSkippedCount(),
                 batch.getFailedCount(),
                 List.of()

@@ -194,8 +194,9 @@ function renderDiagnostics(stats) {
 }
 
 function renderImportResult(result) {
-  const changed = result.created + result.updated
-  const message = `新增 ${result.created} · 更新 ${result.updated} · 已存在 ${result.skipped}`
+  const restored = result.restored || 0
+  const changed = result.created + result.updated + restored
+  const message = `新增 ${result.created} · 更新 ${result.updated} · 恢复 ${restored} · 已存在 ${result.skipped}`
   if (result.failed > 0) {
     renderCaptureResult(`${message} · 失败 ${result.failed}`, 'error')
   } else {

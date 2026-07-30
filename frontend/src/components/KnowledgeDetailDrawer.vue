@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { Delete, Link, RefreshLeft, Upload } from '@element-plus/icons-vue'
 import type { KnowledgeItem } from '../api/items'
+import { proxiedImageUrl } from '../api/media'
 import type { Category, Tag } from '../api/metadata'
 
 const props = defineProps<{
@@ -39,6 +40,7 @@ const drawerVisible = computed({
   get: () => props.modelValue,
   set: (value) => emit('update:modelValue', value),
 })
+const imageUrls = computed(() => props.item?.imageUrls.map(proxiedImageUrl) || [])
 
 function save() {
   emit('save', {
@@ -70,15 +72,14 @@ function formatDate(value: string | null) {
         <span>更新于 {{ formatDate(item.updatedAt) }}</span>
       </div>
 
-      <div v-if="item.imageUrls.length" class="image-strip">
+      <div v-if="imageUrls.length" class="image-strip">
         <el-image
-          v-for="image in item.imageUrls"
+          v-for="image in imageUrls"
           :key="image"
           :src="image"
-          :preview-src-list="item.imageUrls"
+          :preview-src-list="imageUrls"
           fit="cover"
           lazy
-          referrerpolicy="no-referrer"
         />
       </div>
 

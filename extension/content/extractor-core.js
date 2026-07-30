@@ -140,6 +140,10 @@ export function extractFavoritesPage(document, pageUrl, capturedAt = new Date(),
     }
     if (extracted.accessSource === 'PAGE_STATE') stateTokenMatchCount++
     const item = extracted.item
+    if (!isCollectSource(item.url)) {
+      skipped++
+      continue
+    }
     const key = item.sourceItemId || canonicalPostKey(item.url)
     if (seen.has(key)) {
       duplicates++
@@ -390,10 +394,7 @@ function extractCard(card, pageUrl, capturedAt, accessContextByNoteId) {
   if (!postUrl) return { status: 'SKIPPED_MISSING_ACCESS_CONTEXT', noteId, hadCompleteHref }
 
   const image = card.querySelector('.cover img, a.cover img, img')
-  const coverUrl = normalizeMediaUrl(
-    image?.currentSrc || image?.getAttribute('data-src') || image?.getAttribute('src'),
-    pageUrl,
-  )
+  const coverUrl = normalizeMediaUrl(imageUrlFromElement(image), pageUrl)
   const title = limit(
     firstTextWithin(card, CARD_TITLE_SELECTORS)
       || normalizeWhitespace(anchor.getAttribute('title'))
@@ -452,14 +453,28 @@ function collectImageUrls(document, pageUrl) {
   for (const selector of IMAGE_SELECTORS) {
     for (const element of document.querySelectorAll(selector)) {
       if (!isVisible(element)) continue
-      const raw = element.tagName?.toLowerCase() === 'meta'
-        ? element.getAttribute('content')
-        : element.currentSrc || element.getAttribute('data-src') || element.getAttribute('src')
-      const normalized = normalizeMediaUrl(raw, pageUrl)
+      const normalized = normalizeMediaUrl(imageUrlFromElement(element), pageUrl)
       if (normalized && !urls.includes(normalized)) urls.push(normalized)
     }
   }
   return urls
+}
+
+function imageUrlFromElement(element) {
+  if (!element) return null
+  if (element.tagName?.toLowerCase() === 'meta') return element.getAttribute('content')
+  return element.currentSrc
+    || element.getAttribute('data-src')
+    || element.getAttribute('src')
+    || firstSrcsetUrl(element.getAttribute('srcset'))
+}
+
+function firstSrcsetUrl(value) {
+  return String(value || '').split(',').map((part) => part.trim().split(/\s+/u)[0]).find(Boolean) || null
+}
+
+function isCollectSource(value) {
+  return safeUrl(value)?.searchParams.get('xsec_source') === 'pc_collect'
 }
 
 function isVisible(element) {
