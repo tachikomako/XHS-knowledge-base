@@ -30,3 +30,4 @@ logs/
 extension/node_modules/
 extension/*.zip
 extension/*.crx
+dist/
