@@ -35,7 +35,7 @@ public class SettingsService {
     public boolean aiEnabled() {
         String value = jdbcTemplate.query(
                 "SELECT value FROM app_settings WHERE key = ?",
-                result -> result.next() ? result.getString("value") : "false",
+                result -> result.next() ? result.getString("value") : Boolean.toString(StringUtils.hasText(apiKey)),
                 AI_ENABLED_KEY
         );
         return Boolean.parseBoolean(value);

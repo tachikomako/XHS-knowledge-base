@@ -83,6 +83,27 @@ class AiOrganizationServiceTest {
     }
 
     @Test
+    void createsDefaultCategoriesWhenAiRunsBeforeUserCreatesCategories() throws Exception {
+        String itemId = importItem();
+        when(qwenClient.organize(anyString())).thenReturn(new QwenAiResult(
+                "这是一个 AI 工具教程。",
+                "default-technology",
+                List.of(),
+                List.of("AI工具"),
+                0.8
+        ));
+
+        aiOrganizationService.organizeNow(itemId);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT category_id FROM knowledge_items WHERE id = ?", String.class, itemId
+        )).isEqualTo("default-technology");
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT name FROM categories ORDER BY sort_order", String.class
+        )).containsExactly("技术", "软件工具", "英语学习", "生活", "其他");
+    }
+
+    @Test
     void doesNotOverwriteManualMetadata() throws Exception {
         String categoryId = insertCategory("AI");
         String tagId = insertTag("Agent");

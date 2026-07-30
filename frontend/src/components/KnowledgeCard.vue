@@ -39,7 +39,7 @@ function formatDate(value: string) {
         </button>
       </div>
       <div class="card-footer">
-        <span>{{ categoryName || (item.captureLevel === 'DETAIL' ? '正文快照' : '链接卡片') }}</span>
+        <span>{{ categoryName || '未分类' }}</span>
         <span v-if="item.userNote" class="has-note">有笔记</span>
       </div>
     </div>

@@ -19,6 +19,13 @@ import java.util.Set;
 
 @Service
 public class AiOrganizationService {
+    private static final List<DefaultCategory> DEFAULT_CATEGORIES = List.of(
+            new DefaultCategory("default-technology", "技术", 10),
+            new DefaultCategory("default-software", "软件工具", 20),
+            new DefaultCategory("default-english", "英语学习", 30),
+            new DefaultCategory("default-life", "生活", 40),
+            new DefaultCategory("default-other", "其他", 50)
+    );
 
     private final KnowledgeItemMapper itemMapper;
     private final JdbcTemplate jdbcTemplate;
@@ -55,6 +62,7 @@ public class AiOrganizationService {
     public void organizeNow(String itemId) throws Exception {
         KnowledgeItemEntity item = itemMapper.selectById(itemId);
         if (item == null || Integer.valueOf(1).equals(item.getManualMetadataLocked())) return;
+        ensureDefaultCategories();
         QwenAiResult result = qwenClient.organize(prompt(item));
         item = itemMapper.selectById(itemId);
         if (item == null || Integer.valueOf(1).equals(item.getManualMetadataLocked())) return;
@@ -127,6 +135,18 @@ public class AiOrganizationService {
         return jdbcTemplate.queryForList("SELECT id, name FROM " + table + " ORDER BY lower(name)");
     }
 
+    private void ensureDefaultCategories() {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM categories", Integer.class);
+        if (count != null && count > 0) return;
+        String timestamp = now();
+        for (DefaultCategory category : DEFAULT_CATEGORIES) {
+            jdbcTemplate.update("""
+                    INSERT OR IGNORE INTO categories(id, name, parent_id, sort_order, created_at, updated_at)
+                    VALUES (?, ?, NULL, ?, ?, ?)
+                    """, category.id(), category.name(), category.sortOrder(), timestamp, timestamp);
+        }
+    }
+
     private void replaceTags(String itemId, List<String> tagIds) {
         jdbcTemplate.update("DELETE FROM knowledge_item_tags WHERE item_id = ?", itemId);
         for (String tagId : tagIds) {
@@ -158,5 +178,8 @@ public class AiOrganizationService {
 
     private String now() {
         return OffsetDateTime.now(ZoneOffset.UTC).toString();
+    }
+
+    private record DefaultCategory(String id, String name, int sortOrder) {
     }
 }

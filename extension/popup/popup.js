@@ -91,11 +91,7 @@ async function inspectCurrentPage() {
   captureMeta.textContent = '只读取当前页面已经加载的内容'
   renderCaptureResult('', '')
   try {
-    const response = await withTimeout((async () => {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-      if (!tab?.id) throw new Error('无法读取当前标签页')
-      return chrome.tabs.sendMessage(tab.id, { type: 'INSPECT_XHS_PAGE' })
-    })())
+    const response = await withTimeout(inspectActiveTab())
     if (!response?.ok) throw new Error(response?.error || '当前页面无法剪藏')
 
     if (response.pageType === 'CURRENT_POST') {
@@ -107,7 +103,6 @@ async function inspectCurrentPage() {
       captureTitle.textContent = response.item.title
       captureMeta.textContent = [
         response.item.author || '作者未知',
-        response.item.captureLevel === 'DETAIL' ? '正文快照' : '链接卡片',
         response.item.imageUrls.length ? `${response.item.imageUrls.length} 张图片` : null,
       ].filter(Boolean).join(' · ')
     } else if (response.pageType === 'FAVORITE') {
@@ -157,6 +152,25 @@ async function inspectCurrentPage() {
     rescanButton.removeAttribute('aria-busy')
     rescanButton.textContent = '重新扫描'
   }
+}
+
+async function inspectActiveTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  if (!tab?.id) throw new Error('无法读取当前标签页')
+  try {
+    return await chrome.tabs.sendMessage(tab.id, { type: 'INSPECT_XHS_PAGE' })
+  } catch (error) {
+    if (!isMissingContentScriptError(error)) throw error
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ['content/content-script.js'],
+    })
+    return chrome.tabs.sendMessage(tab.id, { type: 'INSPECT_XHS_PAGE' })
+  }
+}
+
+function isMissingContentScriptError(error) {
+  return error instanceof Error && error.message.includes('Receiving end does not exist')
 }
 
 function renderDiagnostics(stats) {
