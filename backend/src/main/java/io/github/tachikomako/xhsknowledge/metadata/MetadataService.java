@@ -138,6 +138,22 @@ public class MetadataService {
         jdbcTemplate.update("DELETE FROM tags WHERE id = ?", id);
     }
 
+    @Transactional
+    public TagView mergeTag(String sourceTagId, String targetTagId) {
+        if (!StringUtils.hasText(targetTagId) || sourceTagId.equals(targetTagId)) {
+            throw badRequest("INVALID_TAG_MERGE", "targetTagId must be a different existing tag");
+        }
+        requireTag(sourceTagId);
+        requireTag(targetTagId);
+        jdbcTemplate.update("""
+                INSERT OR IGNORE INTO knowledge_item_tags(item_id, tag_id)
+                SELECT item_id, ? FROM knowledge_item_tags WHERE tag_id = ?
+                """, targetTagId, sourceTagId);
+        jdbcTemplate.update("DELETE FROM knowledge_item_tags WHERE tag_id = ?", sourceTagId);
+        jdbcTemplate.update("DELETE FROM tags WHERE id = ?", sourceTagId);
+        return findTag(targetTagId);
+    }
+
     private CategoryView findCategory(String id) {
         return listCategories().stream()
                 .filter(category -> category.id().equals(id))

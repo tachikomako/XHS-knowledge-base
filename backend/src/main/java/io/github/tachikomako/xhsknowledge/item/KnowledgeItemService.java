@@ -64,7 +64,11 @@ public class KnowledgeItemService {
         LambdaQueryWrapper<KnowledgeItemEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(KnowledgeItemEntity::getLifecycleStatus,
                 StringUtils.hasText(lifecycleStatus) ? lifecycleStatus : "ACTIVE");
-        wrapper.eq(StringUtils.hasText(categoryId), KnowledgeItemEntity::getCategoryId, categoryId);
+        if (StringUtils.hasText(categoryId)) {
+            wrapper.and(nested -> nested
+                    .eq(KnowledgeItemEntity::getCategoryId, categoryId)
+                    .or().apply("category_id IN (SELECT id FROM categories WHERE parent_id = {0})", categoryId));
+        }
         if (StringUtils.hasText(tagId)) {
             if (tagId.length() > 128) throw badRequest("INVALID_FILTER", "tagId is too long");
             wrapper.apply(
@@ -186,20 +190,6 @@ public class KnowledgeItemService {
                 normalizedCategoryId,
                 normalizedCategoryId
         );
-    }
-
-    @Transactional
-    public void permanentlyDelete(String id) {
-        KnowledgeItemEntity item = requireItem(id);
-        if (!"TRASHED".equals(item.getLifecycleStatus())) {
-            throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    "ITEM_NOT_TRASHED",
-                    "Only items in trash can be permanently deleted"
-            );
-        }
-        jdbcTemplate.update("DELETE FROM knowledge_item_tags WHERE item_id = ?", id);
-        itemMapper.deleteById(id);
     }
 
     private KnowledgeItemEntity requireItem(String id) {

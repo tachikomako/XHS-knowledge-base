@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createCategory, createTag, deleteTag, fetchCategories, updateCategory } from './metadata'
+import { createCategory, createTag, deleteTag, fetchCategories, mergeTag, updateCategory } from './metadata'
 
 describe('metadata API', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -20,11 +20,16 @@ describe('metadata API', () => {
     await createCategory({ name: '技术', parentId: null, sortOrder: 0 })
     await updateCategory('category/1', { name: 'AI', parentId: null, sortOrder: 10 })
     await createTag('#Agent')
+    await mergeTag('tag/source', 'tag/target')
 
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/categories/category%2F1', expect.objectContaining({ method: 'PUT' }))
     expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/v1/tags', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ name: '#Agent' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/v1/tags/tag%2Fsource/merge', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ targetTagId: 'tag/target' }),
     }))
   })
 

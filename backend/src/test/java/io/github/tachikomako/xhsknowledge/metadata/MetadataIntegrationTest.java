@@ -74,6 +74,9 @@ class MetadataIntegrationTest {
         mockMvc.perform(get("/api/v1/items").param("categoryId", childId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(1));
+        mockMvc.perform(get("/api/v1/items").param("categoryId", rootId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1));
         mockMvc.perform(get("/api/v1/items").param("tagId", tagId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(1));
@@ -149,6 +152,31 @@ class MetadataIntegrationTest {
                 .andExpect(jsonPath("$.affected").value(0));
     }
 
+    @Test
+    void mergesTagsWithoutDuplicatingItemLinks() throws Exception {
+        String sourceTagId = createTag("source");
+        String targetTagId = createTag("target");
+        String firstItemId = importItem("merge-first-batch", "mergefirst123");
+        String secondItemId = importItem("merge-second-batch", "mergesecond123");
+
+        replaceTags(firstItemId, sourceTagId, targetTagId);
+        replaceTags(secondItemId, sourceTagId);
+
+        mockMvc.perform(post("/api/v1/tags/{id}/merge", sourceTagId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetTagId\":\"%s\"}".formatted(targetTagId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(targetTagId))
+                .andExpect(jsonPath("$.itemCount").value(2));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM tags WHERE id = ?", Integer.class, sourceTagId
+        )).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM knowledge_item_tags WHERE tag_id = ?", Integer.class, targetTagId
+        )).isEqualTo(2);
+    }
+
     private String createCategory(String name, String parentId) throws Exception {
         var request = objectMapper.createObjectNode().put("name", name).put("sortOrder", 0);
         if (parentId == null) request.putNull("parentId"); else request.put("parentId", parentId);
@@ -158,6 +186,25 @@ class MetadataIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("id").asText();
+    }
+
+    private String createTag(String name) throws Exception {
+        String body = mockMvc.perform(post("/api/v1/tags")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"%s\"}".formatted(name)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body).path("id").asText();
+    }
+
+    private void replaceTags(String itemId, String... tagIds) throws Exception {
+        var request = objectMapper.createObjectNode();
+        var tags = request.putArray("tagIds");
+        for (String tagId : tagIds) tags.add(tagId);
+        mockMvc.perform(patch("/api/v1/items/{id}", itemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request.toString()))
+                .andExpect(status().isOk());
     }
 
     private String importItem() throws Exception {
