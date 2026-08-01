@@ -184,7 +184,7 @@ class ImportFlowIntegrationTest {
                 "clear-test-setting", "on", "2026-08-01T00:00:00Z"
         );
         jdbcTemplate.update(
-                "INSERT INTO sync_runs(id, requested_sources, status, started_at) VALUES (?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO sync_runs(id, requested_sources, status, started_at) VALUES (?, ?, ?, ?)",
                 "clear-sync-run", "[\"FAVORITE\"]", "COMPLETED", "2026-08-01T00:00:00Z"
         );
 

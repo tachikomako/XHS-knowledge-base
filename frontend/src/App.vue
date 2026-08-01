@@ -19,7 +19,8 @@ import {
   updateTag,
 } from './api/metadata'
 import type { Category, CategoryInput, CategorySuggestion, SourceTag, Tag } from './api/metadata'
-import { fetchLatestSyncRun, fetchSettings, testAiConnection, updateAiSettings } from './api/settings'
+import { clearAiCredentials, fetchLatestSyncRun, fetchSettings, testAiConnection, updateAiSettings } from './api/settings'
+import type { AiSettingsUpdate } from './api/settings'
 import type { SettingsResponse, SyncRunResponse } from './api/settings'
 import KnowledgeCard from './components/KnowledgeCard.vue'
 import KnowledgeDetailDrawer from './components/KnowledgeDetailDrawer.vue'
@@ -177,11 +178,16 @@ async function loadSettings() {
   }
 }
 
-async function toggleAi(enabled: boolean) {
+async function saveAiSettings(input: AiSettingsUpdate) {
   settingsSaving.value = true
   try {
-    settings.value = await updateAiSettings(enabled)
-    ElMessage.success(enabled ? 'AI 整理已开启' : 'AI 整理已关闭')
+    settings.value = await updateAiSettings(input)
+    const result = await testAiConnection()
+    if (result.success) {
+      ElMessage.success(`Qwen 连接成功：${result.model}`)
+    } else {
+      ElMessage.warning(result.message)
+    }
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '保存设置失败')
   } finally {
@@ -202,6 +208,26 @@ async function testAi() {
     ElMessage.error(error instanceof Error ? error.message : '测试 Qwen 连接失败')
   } finally {
     aiTesting.value = false
+  }
+}
+
+async function clearAiKey() {
+  try {
+    await ElMessageBox.confirm('清除后需要重新填写 API Key 才能使用 Qwen。', '清除 API Key？', {
+      confirmButtonText: '清除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger',
+    })
+    settingsSaving.value = true
+    settings.value = await clearAiCredentials()
+    ElMessage.success('API Key 已清除')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(error instanceof Error ? error.message : '清除 API Key 失败')
+    }
+  } finally {
+    settingsSaving.value = false
   }
 }
 
@@ -628,8 +654,9 @@ function replaceItem(updated: KnowledgeItem) {
       :testing-ai="aiTesting"
       :organizing-pending="aiOrganizingPending"
       @reload="loadSettings"
-      @toggle-ai="toggleAi"
+      @save-ai="saveAiSettings"
       @test-ai="testAi"
+      @clear-ai-key="clearAiKey"
       @organize-pending="organizePending"
     />
   </main>

@@ -1,6 +1,8 @@
 package io.github.tachikomako.xhsknowledge.settings;
 
 import io.github.tachikomako.xhsknowledge.ai.QwenClient;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,12 +28,17 @@ public class SettingsController {
     }
 
     @PatchMapping("/ai")
-    public SettingsView updateAi(@RequestBody AiSettingsRequest request) {
-        return settingsService.updateAi(request.aiEnabled());
+    public SettingsView updateAi(@Valid @RequestBody AiSettingsRequest request) {
+        return settingsService.updateAi(request);
     }
 
     @PostMapping("/ai/test")
     public AiConnectionTestResponse testAi() {
         return settingsService.testAiConnection(qwenClient);
+    }
+
+    @DeleteMapping("/ai/credentials")
+    public SettingsView clearAiCredentials() {
+        return settingsService.clearAiCredentials();
     }
 }

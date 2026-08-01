@@ -1,6 +1,7 @@
 export interface SettingsResponse {
   aiEnabled: boolean
   aiConfigured: boolean
+  baseUrl: string
   model: string
   pendingAiCount: number
   failedAiCount: number
@@ -31,6 +32,15 @@ export interface SyncRunResponse {
   errorSummary: string | null
 }
 
+export interface AiSettingsUpdate {
+  aiEnabled: boolean
+  apiKey: string
+  baseUrl: string
+  model: string
+}
+
+const extensionToken = import.meta.env.VITE_XHS_EXTENSION_TOKEN || 'dev-local-token'
+
 export function fetchSettings(signal?: AbortSignal): Promise<SettingsResponse> {
   return requestJson('/api/v1/settings', { signal })
 }
@@ -39,16 +49,20 @@ export function fetchLatestSyncRun(signal?: AbortSignal): Promise<SyncRunRespons
   return requestJson('/api/v1/sync-runs/latest', { signal })
 }
 
-export function updateAiSettings(aiEnabled: boolean): Promise<SettingsResponse> {
+export function updateAiSettings(settings: AiSettingsUpdate): Promise<SettingsResponse> {
   return requestJson('/api/v1/settings/ai', {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ aiEnabled }),
+    headers: writeHeaders(),
+    body: JSON.stringify(settings),
   })
 }
 
 export function testAiConnection(): Promise<AiConnectionTestResponse> {
-  return requestJson('/api/v1/settings/ai/test', { method: 'POST' })
+  return requestJson('/api/v1/settings/ai/test', { method: 'POST', headers: writeHeaders() })
+}
+
+export function clearAiCredentials(): Promise<SettingsResponse> {
+  return requestJson('/api/v1/settings/ai/credentials', { method: 'DELETE', headers: writeHeaders() })
 }
 
 async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T> {
@@ -65,4 +79,11 @@ async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T
   }
   const text = await response.text()
   return (text ? JSON.parse(text) : null) as T
+}
+
+function writeHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'X-Extension-Token': extensionToken,
+  }
 }
