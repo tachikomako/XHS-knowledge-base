@@ -228,7 +228,6 @@ export function extractCurrentPost(document, pageUrl, capturedAt = new Date()) {
 
   if (!author) warnings.push('未识别到作者')
   if (!text) warnings.push('未识别到正文，将保存为卡片')
-  if (imageUrls.length === 0) warnings.push('未识别到帖子图片')
 
   return {
     pageType: 'CURRENT_POST',

@@ -17,7 +17,7 @@ test('rejects empty and oversized imports', () => {
 test('merges backend results into one popup summary', () => {
   const summary = createImportSummary()
   mergeImportResult(summary, {
-    received: 50, created: 40, updated: 5, restored: 1, skipped: 4, failed: 1, results: [{ status: 'CREATED' }],
+    received: 50, created: 40, updated: 5, skipped: 4, failed: 1, results: [{ status: 'CREATED' }],
   })
   mergeImportResult(summary, {
     received: 10, created: 2, updated: 1, skipped: 7, failed: 0, results: [{ status: 'SKIPPED' }],
@@ -27,7 +27,6 @@ test('merges backend results into one popup summary', () => {
     received: 60,
     created: 42,
     updated: 6,
-    restored: 1,
     skipped: 11,
     failed: 1,
     results: [{ status: 'CREATED' }, { status: 'SKIPPED' }],

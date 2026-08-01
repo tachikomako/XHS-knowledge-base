@@ -1,4 +1,3 @@
-export type LifecycleStatus = 'ACTIVE' | 'ARCHIVED' | 'TRASHED'
 export type CaptureLevel = 'CARD' | 'DETAIL'
 
 export interface KnowledgeItem {
@@ -20,7 +19,7 @@ export interface KnowledgeItem {
   aiStatus: string
   aiConfidence: number | null
   aiLastError: string | null
-  lifecycleStatus: LifecycleStatus
+  lifecycleStatus: 'ACTIVE'
   manualMetadataLocked: boolean
   createdAt: string
   sourceUpdatedAt: string | null
@@ -40,7 +39,6 @@ export interface ItemSearchParams {
   categoryId?: string
   tagId?: string
   sourceType?: string
-  lifecycleStatus?: LifecycleStatus
   captureLevel?: CaptureLevel | ''
   page?: number
   pageSize?: number
@@ -63,7 +61,6 @@ export async function searchItems(
   appendIfPresent(query, 'categoryId', params.categoryId)
   appendIfPresent(query, 'tagId', params.tagId)
   appendIfPresent(query, 'sourceType', params.sourceType)
-  appendIfPresent(query, 'lifecycleStatus', params.lifecycleStatus)
   appendIfPresent(query, 'captureLevel', params.captureLevel)
   appendIfPresent(query, 'page', params.page ?? 1)
   appendIfPresent(query, 'pageSize', params.pageSize ?? 12)
@@ -83,16 +80,8 @@ export function updateItem(id: string, changes: UpdateKnowledgeItem): Promise<Kn
   })
 }
 
-export function changeItemLifecycle(id: string, action: 'archive' | 'trash' | 'restore'): Promise<KnowledgeItem> {
-  return requestJson(`/api/v1/items/${encodeURIComponent(id)}/${action}`, { method: 'POST' })
-}
-
-export function bulkTrashItems(categoryId?: string): Promise<{ affected: number }> {
-  return requestJson('/api/v1/items/bulk-trash', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(categoryId ? { scope: 'CATEGORY', categoryId } : { scope: 'ALL' }),
-  })
+export async function deleteItem(id: string): Promise<void> {
+  await requestJson<void>(`/api/v1/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
 async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T> {
@@ -107,6 +96,7 @@ async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T
     const body = await response.json().catch(() => null) as { message?: string } | null
     throw new Error(body?.message || `后端返回 ${response.status}`)
   }
+  if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
 

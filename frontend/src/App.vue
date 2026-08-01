@@ -2,8 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Collection, Connection, Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { bulkTrashItems, changeItemLifecycle, getItem, searchItems, updateItem } from './api/items'
-import type { KnowledgeItem, LifecycleStatus } from './api/items'
+import { deleteItem, getItem, searchItems, updateItem } from './api/items'
+import type { KnowledgeItem } from './api/items'
 import {
   createCategory,
   createTag,
@@ -32,7 +32,6 @@ const total = ref(0)
 const page = ref(1)
 const queryInput = ref('')
 const appliedQuery = ref('')
-const lifecycleStatus = ref<LifecycleStatus>('ACTIVE')
 const categoryId = ref('')
 const tagId = ref('')
 const sourceType = ref('')
@@ -78,16 +77,8 @@ const categoryTree = computed(() => orderedCategories.value
     children: orderedCategories.value.filter((child) => child.parentId === category.id),
   })))
 
-const libraryLabel = computed(() => ({
-  ACTIVE: '知识库',
-  ARCHIVED: '归档',
-  TRASHED: '回收站',
-})[lifecycleStatus.value])
-
 const emptyDescription = computed(() => {
   if (appliedQuery.value) return `没有找到与“${appliedQuery.value}”相关的内容`
-  if (lifecycleStatus.value === 'TRASHED') return '回收站是空的'
-  if (lifecycleStatus.value === 'ARCHIVED') return '还没有归档内容'
   return '安装扩展并剪藏第一篇小红书帖子吧'
 })
 
@@ -104,7 +95,7 @@ onBeforeUnmount(() => {
   settingsController?.abort()
 })
 
-watch([lifecycleStatus, categoryId, tagId, sourceType], () => {
+watch([categoryId, tagId, sourceType], () => {
   page.value = 1
   void loadItems()
 })
@@ -121,7 +112,6 @@ async function loadItems() {
       categoryId: categoryId.value,
       tagId: tagId.value,
       sourceType: sourceType.value,
-      lifecycleStatus: lifecycleStatus.value,
       page: page.value,
       pageSize: PAGE_SIZE,
     }, controller.signal)
@@ -333,36 +323,6 @@ async function removeCategory(category: Category) {
   }
 }
 
-async function clearLibrary(category?: Category) {
-  const target = category ? `分类“${categoryNames.value[category.id]}”` : '整个知识库'
-  const confirmation = category ? category.name : '清空知识库'
-  try {
-    await ElMessageBox.prompt(
-      `这会把${target}中的内容移入回收站。请输入“${confirmation}”确认。`,
-      `清空${target}？`,
-      {
-        confirmButtonText: '移入回收站',
-        cancelButtonText: '取消',
-        type: 'warning',
-        inputPattern: new RegExp(`^${escapeRegExp(confirmation)}$`, 'u'),
-        inputErrorMessage: `请输入“${confirmation}”`,
-      },
-    )
-    taxonomyLoading.value = true
-    const result = await bulkTrashItems(category?.id)
-    ElMessage.success(`已将 ${result.affected} 条内容移入回收站`)
-    await Promise.all([loadItems(), loadMetadata()])
-  } catch (error) {
-    handleDialogError(error)
-  } finally {
-    taxonomyLoading.value = false
-  }
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
-}
-
 async function removeTag(tag: Tag) {
   try {
     await ElMessageBox.confirm('删除标签会解除帖子关联，但不会删除帖子。', `删除 #${tag.name}？`, {
@@ -398,24 +358,19 @@ function handleDialogError(error: unknown) {
   }
 }
 
-async function changeLifecycle(action: 'archive' | 'trash' | 'restore') {
+async function deleteSelectedItem() {
   if (!selectedItem.value) return
-  const copy = {
-    archive: ['归档这条内容？', '归档后可在“归档”中找到。'],
-    trash: ['移入回收站？', '这不会取消小红书原帖收藏。'],
-    restore: ['恢复这条内容？', '它将重新出现在知识库中。'],
-  }[action]
-
   try {
-    await ElMessageBox.confirm(copy[1], copy[0], {
-      confirmButtonText: '确认',
+    await ElMessageBox.confirm('删除后数据库中会直接移除；如果它仍在小红书收藏或点赞中，下次手动同步可重新创建。', '删除这条内容？', {
+      confirmButtonText: '删除',
       cancelButtonText: '取消',
-      type: action === 'trash' ? 'warning' : 'info',
+      type: 'warning',
     })
-    await changeItemLifecycle(selectedItem.value.id, action)
+    await deleteItem(selectedItem.value.id)
     drawerVisible.value = false
-    ElMessage.success(action === 'restore' ? '已恢复' : action === 'archive' ? '已归档' : '已移入回收站')
-    await loadItems()
+    selectedItem.value = null
+    ElMessage.success('已删除')
+    await Promise.all([loadItems(), loadMetadata()])
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
       ElMessage.error(error instanceof Error ? error.message : '操作失败')
@@ -448,7 +403,7 @@ function replaceItem(updated: KnowledgeItem) {
     <section class="library-heading">
       <div>
         <span class="eyebrow">PERSONAL LIBRARY</span>
-        <h1>{{ libraryLabel }}</h1>
+        <h1>知识库</h1>
         <p>收藏不是终点。把值得留下的内容变成可以搜索、理解和继续补充的知识。</p>
       </div>
       <div class="total-counter"><strong>{{ total }}</strong><span>条内容</span></div>
@@ -460,11 +415,6 @@ function replaceItem(updated: KnowledgeItem) {
         <el-button native-type="submit" size="large" type="primary">搜索</el-button>
       </form>
       <div class="filter-row">
-        <el-radio-group v-model="lifecycleStatus" size="large">
-          <el-radio-button value="ACTIVE">知识库</el-radio-button>
-          <el-radio-button value="ARCHIVED">归档</el-radio-button>
-          <el-radio-button value="TRASHED">回收站</el-radio-button>
-        </el-radio-group>
         <el-select v-model="sourceType" size="large" aria-label="来源筛选" style="width: 150px">
           <el-option label="全部来源" value="" />
           <el-option label="小红书" value="XIAOHONGSHU" />
@@ -535,7 +485,7 @@ function replaceItem(updated: KnowledgeItem) {
       :categories="orderedCategories"
       :tags="tags"
       @save="saveDetails"
-      @lifecycle="changeLifecycle"
+      @delete="deleteSelectedItem"
     />
 
     <TaxonomyDialog
@@ -551,8 +501,6 @@ function replaceItem(updated: KnowledgeItem) {
       @merge-tag="mergeTag"
       @delete-category="removeCategory"
       @delete-tag="removeTag"
-      @clear-category="clearLibrary"
-      @clear-library="clearLibrary()"
     />
 
     <SettingsDialog

@@ -103,7 +103,6 @@ async function inspectCurrentPage() {
       captureTitle.textContent = response.item.title
       captureMeta.textContent = [
         response.item.author || '作者未知',
-        response.item.imageUrls.length ? `${response.item.imageUrls.length} 张图片` : null,
       ].filter(Boolean).join(' · ')
     } else if (response.pageType === 'FAVORITE') {
       currentExtraction = {
@@ -194,9 +193,8 @@ function renderDiagnostics(stats) {
 }
 
 function renderImportResult(result) {
-  const restored = result.restored || 0
-  const changed = result.created + result.updated + restored
-  const message = `新增 ${result.created} · 更新 ${result.updated} · 恢复 ${restored} · 已存在 ${result.skipped}`
+  const changed = result.created + result.updated
+  const message = `新增 ${result.created} · 更新 ${result.updated} · 已存在 ${result.skipped}`
   if (result.failed > 0) {
     renderCaptureResult(`${message} · 失败 ${result.failed}`, 'error')
   } else {

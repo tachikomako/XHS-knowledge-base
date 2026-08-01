@@ -1,13 +1,12 @@
 package io.github.tachikomako.xhsknowledge.importx;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.tachikomako.xhsknowledge.ai.AiOrganizationService;
 import io.github.tachikomako.xhsknowledge.common.ApiException;
 import io.github.tachikomako.xhsknowledge.item.KnowledgeItemEntity;
 import io.github.tachikomako.xhsknowledge.item.KnowledgeItemMapper;
 import io.github.tachikomako.xhsknowledge.source.XiaohongshuUrlNormalizer;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -33,21 +32,21 @@ public class ImportService {
     private final KnowledgeItemMapper itemMapper;
     private final ImportBatchMapper batchMapper;
     private final XiaohongshuUrlNormalizer urlNormalizer;
-    private final ObjectMapper objectMapper;
     private final AiOrganizationService aiOrganizationService;
+    private final JdbcTemplate jdbcTemplate;
 
     public ImportService(
             KnowledgeItemMapper itemMapper,
             ImportBatchMapper batchMapper,
             XiaohongshuUrlNormalizer urlNormalizer,
-            ObjectMapper objectMapper,
-            AiOrganizationService aiOrganizationService
+            AiOrganizationService aiOrganizationService,
+            JdbcTemplate jdbcTemplate
     ) {
         this.itemMapper = itemMapper;
         this.batchMapper = batchMapper;
         this.urlNormalizer = urlNormalizer;
-        this.objectMapper = objectMapper;
         this.aiOrganizationService = aiOrganizationService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Transactional
@@ -61,7 +60,6 @@ public class ImportService {
         List<ImportResponse.ItemResult> results = new ArrayList<>();
         int created = 0;
         int updated = 0;
-        int restored = 0;
         int skipped = 0;
         int failed = 0;
         List<String> aiItemIds = new ArrayList<>();
@@ -78,10 +76,6 @@ public class ImportService {
                     }
                     case "UPDATED" -> {
                         updated++;
-                        aiItemIds.add(result.itemId());
-                    }
-                    case "RESTORED" -> {
-                        restored++;
                         aiItemIds.add(result.itemId());
                     }
                     default -> skipped++;
@@ -105,7 +99,7 @@ public class ImportService {
         batch.setExtractorVersion(request.extractorVersion());
         batch.setReceived(request.items().size());
         batch.setCreatedCount(created);
-        batch.setUpdatedCount(updated + restored);
+        batch.setUpdatedCount(updated);
         batch.setSkippedCount(skipped);
         batch.setFailedCount(failed);
         batch.setCreatedAt(now());
@@ -118,7 +112,6 @@ public class ImportService {
                 request.items().size(),
                 created,
                 updated,
-                restored,
                 skipped,
                 failed,
                 List.copyOf(results)
@@ -147,14 +140,13 @@ public class ImportService {
             itemMapper.insert(created);
             return new ImportResponse.ItemResult(index, created.getId(), source.sourceItemId(), "CREATED", null);
         }
-        if ("TRASHED".equals(existing.getLifecycleStatus())) {
-            mergeSourceFields(existing, incoming, source);
-            String timestamp = now();
-            existing.setLifecycleStatus("ACTIVE");
-            existing.setSourceUpdatedAt(timestamp);
-            existing.setUpdatedAt(timestamp);
-            itemMapper.updateById(existing);
-            return new ImportResponse.ItemResult(index, existing.getId(), source.sourceItemId(), "RESTORED", null);
+        if (!"ACTIVE".equals(existing.getLifecycleStatus())) {
+            jdbcTemplate.update("DELETE FROM knowledge_item_tags WHERE item_id = ?", existing.getId());
+            jdbcTemplate.update("DELETE FROM item_ai_suggestions WHERE item_id = ?", existing.getId());
+            itemMapper.deleteById(existing.getId());
+            KnowledgeItemEntity created = createEntity(incoming, source);
+            itemMapper.insert(created);
+            return new ImportResponse.ItemResult(index, created.getId(), source.sourceItemId(), "CREATED", null);
         }
 
         boolean changed = mergeSourceFields(existing, incoming, source);
@@ -180,7 +172,7 @@ public class ImportService {
         item.setContent(trimToNull(incoming.text()));
         item.setAuthor(trimToNull(incoming.author()));
         item.setCoverUrl(normalizeMediaUrl(incoming.coverUrl()));
-        item.setImageUrlsJson(writeImages(incoming.imageUrls()));
+        item.setImageUrlsJson("[]");
         item.setCaptureLevel(incoming.captureLevel());
         item.setAiStatus("NOT_REQUESTED");
         item.setLifecycleStatus("ACTIVE");
@@ -220,12 +212,6 @@ public class ImportService {
                 existing::setCoverUrl
         );
 
-        String incomingImages = writeImages(incoming.imageUrls());
-        if (incomingIsDetail && incomingImages.length() > existing.getImageUrlsJson().length()
-                && !incomingImages.equals(existing.getImageUrlsJson())) {
-            existing.setImageUrlsJson(incomingImages);
-            changed = true;
-        }
         if (incomingIsDetail && "CARD".equals(existing.getCaptureLevel())) {
             existing.setCaptureLevel("DETAIL");
             changed = true;
@@ -304,24 +290,10 @@ public class ImportService {
                 batch.getReceived(),
                 batch.getCreatedCount(),
                 batch.getUpdatedCount(),
-                0,
                 batch.getSkippedCount(),
                 batch.getFailedCount(),
                 List.of()
         );
-    }
-
-    private String writeImages(List<String> imageUrls) {
-        List<String> normalized = imageUrls.stream()
-                .filter(StringUtils::hasText)
-                .map(this::normalizeMediaUrl)
-                .distinct()
-                .toList();
-        try {
-            return objectMapper.writeValueAsString(normalized);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalArgumentException("Invalid image URLs", exception);
-        }
     }
 
     private String safeError(RuntimeException exception) {

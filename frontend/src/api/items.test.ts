@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { bulkTrashItems, changeItemLifecycle, searchItems, updateItem } from './items'
+import { deleteItem, searchItems, updateItem } from './items'
 
 describe('knowledge item API', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -16,30 +16,31 @@ describe('knowledge item API', () => {
       categoryId: 'category-1',
       tagId: 'tag-1',
       sourceType: 'XIAOHONGSHU',
-      lifecycleStatus: 'ARCHIVED',
       captureLevel: '',
       page: 2,
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/items?q=Agent&categoryId=category-1&tagId=tag-1&sourceType=XIAOHONGSHU&lifecycleStatus=ARCHIVED&page=2&pageSize=12&sort=updatedAt%2Cdesc',
+      '/api/v1/items?q=Agent&categoryId=category-1&tagId=tag-1&sourceType=XIAOHONGSHU&page=2&pageSize=12&sort=updatedAt%2Cdesc',
       expect.objectContaining({ signal: undefined }),
     )
   })
 
-  it('sends note edits and lifecycle actions to their dedicated endpoints', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: 'item/1' }) })
+  it('sends note edits and physical deletes to their dedicated endpoints', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'item/1' }) })
+      .mockResolvedValueOnce({ ok: true, status: 204 })
     vi.stubGlobal('fetch', fetchMock)
 
     await updateItem('item/1', { summary: '摘要', userNote: null })
-    await changeItemLifecycle('item/1', 'trash')
+    await deleteItem('item/1')
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/items/item%2F1', expect.objectContaining({
       method: 'PATCH',
       body: JSON.stringify({ summary: '摘要', userNote: null }),
     }))
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/items/item%2F1/trash', expect.objectContaining({
-      method: 'POST',
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/items/item%2F1', expect.objectContaining({
+      method: 'DELETE',
     }))
   })
 
@@ -53,20 +54,4 @@ describe('knowledge item API', () => {
     await expect(searchItems()).rejects.toThrow('查询参数无效')
   })
 
-  it('uses explicit scopes for bulk trash operations', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ affected: 2 }) })
-    vi.stubGlobal('fetch', fetchMock)
-
-    await bulkTrashItems('category/1')
-    await bulkTrashItems()
-
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/items/bulk-trash', expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({ scope: 'CATEGORY', categoryId: 'category/1' }),
-    }))
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/items/bulk-trash', expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({ scope: 'ALL' }),
-    }))
-  })
 })

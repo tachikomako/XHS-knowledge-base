@@ -1,12 +1,14 @@
 package io.github.tachikomako.xhsknowledge.item;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -26,7 +28,6 @@ public class KnowledgeItemController {
             @RequestParam(required = false) String tagId,
             @RequestParam(required = false) String sourceType,
             @RequestParam(required = false) String captureLevel,
-            @RequestParam(required = false) String lifecycleStatus,
             @RequestParam(required = false) String aiStatus,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize,
@@ -38,7 +39,6 @@ public class KnowledgeItemController {
                 tagId,
                 sourceType,
                 captureLevel,
-                lifecycleStatus,
                 aiStatus,
                 page,
                 pageSize,
@@ -51,11 +51,6 @@ public class KnowledgeItemController {
         return itemService.get(id);
     }
 
-    @PostMapping("/bulk-trash")
-    public BulkTrashResponse bulkTrash(@RequestBody BulkTrashRequest request) {
-        return new BulkTrashResponse(itemService.bulkTrash(request.scope(), request.categoryId()));
-    }
-
     @PatchMapping("/{id}")
     public KnowledgeItemView update(
             @PathVariable String id,
@@ -64,22 +59,9 @@ public class KnowledgeItemController {
         return itemService.update(id, request);
     }
 
-    @PostMapping("/{id}/archive")
-    public KnowledgeItemView archive(@PathVariable String id) {
-        return itemService.changeLifecycle(id, "ARCHIVED");
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable String id) {
+        itemService.delete(id);
     }
-
-    @PostMapping("/{id}/trash")
-    public KnowledgeItemView trash(@PathVariable String id) {
-        return itemService.changeLifecycle(id, "TRASHED");
-    }
-
-    @PostMapping("/{id}/restore")
-    public KnowledgeItemView restore(@PathVariable String id) {
-        return itemService.changeLifecycle(id, "ACTIVE");
-    }
-
-    public record BulkTrashRequest(String scope, String categoryId) { }
-
-    public record BulkTrashResponse(int affected) { }
 }
