@@ -21,6 +21,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -39,6 +40,9 @@ class AiOrganizationServiceTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private AiEligibilityService aiEligibilityService;
+
     @MockitoBean
     private QwenClient qwenClient;
 
@@ -53,6 +57,9 @@ class AiOrganizationServiceTest {
         jdbcTemplate.update("DELETE FROM tags");
         jdbcTemplate.update("DELETE FROM categories");
         jdbcTemplate.update("DELETE FROM app_settings");
+        jdbcTemplate.update("""
+                INSERT INTO app_settings(key, value, updated_at) VALUES ('ai.enabled', 'false', '2026-08-01T00:00:00Z')
+                """);
     }
 
     @Test
@@ -158,6 +165,7 @@ class AiOrganizationServiceTest {
 
     @Test
     void manuallyOrganizesPendingItemsInBatches() throws Exception {
+        enableAi();
         String categoryId = insertCategory("AI");
         String itemId = importItem();
         jdbcTemplate.update("UPDATE knowledge_items SET ai_status = 'FAILED' WHERE id = ?", itemId);
@@ -172,13 +180,82 @@ class AiOrganizationServiceTest {
 
         mockMvc.perform(post("/api/v1/ai/organize-pending"))
                 .andExpect(status().isOk())
-                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.processed").value(1))
-                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.succeeded").value(1))
-                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.failed").value(0));
+                .andExpect(jsonPath("$.eligible").value(1))
+                .andExpect(jsonPath("$.processed").value(1))
+                .andExpect(jsonPath("$.succeeded").value(1))
+                .andExpect(jsonPath("$.failed").value(0))
+                .andExpect(jsonPath("$.message").value("已处理 1 条，成功 1 条，失败 0 条"));
 
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT summary FROM knowledge_items WHERE id = ?", String.class, itemId
         )).isEqualTo("Recovered summary");
+    }
+
+    @Test
+    void pendingCountAndBatchUseTheSameEligibilityRules() throws Exception {
+        insertItem("discovered-pending", "DISCOVERED", "PENDING", 0);
+        insertItem("completed-pending", "COMPLETED", "PENDING", 0);
+        insertItem("completed-failed", "COMPLETED", "FAILED", 0);
+        insertItem("completed-processing", "COMPLETED", "PROCESSING", 0);
+        insertItem("completed-locked", "COMPLETED", "PENDING", 1);
+
+        assertThat(aiEligibilityService.eligibleCount()).isEqualTo(2);
+        assertThat(aiEligibilityService.eligibleItemIds(50))
+                .containsExactlyInAnyOrder("completed-pending", "completed-failed")
+                .doesNotContain("discovered-pending", "completed-processing", "completed-locked");
+    }
+
+    @Test
+    void returnsClearMessageWhenAiIsDisabled() throws Exception {
+        insertItem("completed-pending", "COMPLETED", "PENDING", 0);
+        when(qwenClient.configured()).thenReturn(true);
+
+        mockMvc.perform(post("/api/v1/ai/organize-pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eligible").value(1))
+                .andExpect(jsonPath("$.processed").value(0))
+                .andExpect(jsonPath("$.message").value("AI 整理尚未开启"));
+    }
+
+    @Test
+    void returnsClearMessageWhenQwenIsNotConfigured() throws Exception {
+        enableAi();
+        insertItem("completed-pending", "COMPLETED", "PENDING", 0);
+        when(qwenClient.configured()).thenReturn(false);
+
+        mockMvc.perform(post("/api/v1/ai/organize-pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eligible").value(1))
+                .andExpect(jsonPath("$.processed").value(0))
+                .andExpect(jsonPath("$.message").value("请先在设置中配置并测试 Qwen API"));
+    }
+
+    @Test
+    void explainsWhyThereAreNoEligibleItems() throws Exception {
+        enableAi();
+        insertItem("discovered-pending", "DISCOVERED", "PENDING", 0);
+        when(qwenClient.configured()).thenReturn(true);
+
+        mockMvc.perform(post("/api/v1/ai/organize-pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eligible").value(0))
+                .andExpect(jsonPath("$.blockedByContent").value(1))
+                .andExpect(jsonPath("$.message").value("没有可整理内容，请先完成正文同步"));
+
+        jdbcTemplate.update("UPDATE knowledge_items SET content_status = 'COMPLETED', manual_metadata_locked = 1 WHERE id = ?", "discovered-pending");
+
+        mockMvc.perform(post("/api/v1/ai/organize-pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eligible").value(0))
+                .andExpect(jsonPath("$.blockedByManualLock").value(1))
+                .andExpect(jsonPath("$.message").value("待处理内容已被用户手动锁定"));
+
+        jdbcTemplate.update("DELETE FROM knowledge_items");
+
+        mockMvc.perform(post("/api/v1/ai/organize-pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eligible").value(0))
+                .andExpect(jsonPath("$.message").value("当前没有需要 AI 整理的内容"));
     }
 
     private String insertCategory(String name) {
@@ -221,5 +298,33 @@ class AiOrganizationServiceTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("results").path(0).path("itemId").asText();
+    }
+
+    private void insertItem(String id, String contentStatus, String aiStatus, int locked) {
+        jdbcTemplate.update("""
+                INSERT INTO knowledge_items(
+                  id, source_type, canonical_url, original_url, title, content, content_status,
+                  image_urls_json, capture_level, ai_status, lifecycle_status, manual_metadata_locked,
+                  created_at, source_updated_at, updated_at
+                ) VALUES (?, 'XIAOHONGSHU', ?, ?, ?, '正文内容', ?, '[]', 'DETAIL', ?, 'ACTIVE', ?, ?, ?, ?)
+                """,
+                id,
+                "https://www.xiaohongshu.com/explore/" + id,
+                "https://www.xiaohongshu.com/explore/" + id,
+                id,
+                contentStatus,
+                aiStatus,
+                locked,
+                "2026-08-01T00:00:00Z",
+                "2026-08-01T00:00:00Z",
+                "2026-08-01T00:00:00Z"
+        );
+    }
+
+    private void enableAi() {
+        jdbcTemplate.update("""
+                INSERT INTO app_settings(key, value, updated_at) VALUES ('ai.enabled', 'true', '2026-08-01T00:00:00Z')
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                """);
     }
 }

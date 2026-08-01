@@ -56,9 +56,12 @@ export interface UpdateKnowledgeItem {
 }
 
 export interface AiOrganizeBatchResponse {
+  eligible: number
   processed: number
   succeeded: number
   failed: number
+  blockedByContent: number
+  blockedByManualLock: number
   skipped: number
   message: string | null
 }

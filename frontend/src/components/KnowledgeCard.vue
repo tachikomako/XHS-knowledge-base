@@ -15,6 +15,15 @@ defineEmits<{
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' }).format(new Date(value))
 }
+
+function reviewStatus(item: KnowledgeItem) {
+  if (item.contentStatus !== 'COMPLETED') return '正文待补全，暂不可 AI 整理'
+  if (item.aiStatus === 'PENDING') return 'AI 待处理'
+  if (item.aiStatus === 'FAILED') return 'AI 处理失败，可重试'
+  if (item.aiStatus === 'COMPLETED' && item.aiConfidence !== null && item.aiConfidence < 0.5) return '建议人工确认'
+  if (item.aiStatus === 'COMPLETED' && !item.categoryId) return '暂无分类，建议人工整理'
+  return ''
+}
 </script>
 
 <template>
@@ -36,6 +45,7 @@ function formatDate(value: string) {
         <span>{{ item.sourceType === 'XIAOHONGSHU' ? '小红书' : item.sourceType }}</span>
         <span v-if="item.userNote" class="has-note">有笔记</span>
       </div>
+      <div v-if="reviewStatus(item)" class="card-status">{{ reviewStatus(item) }}</div>
     </div>
   </article>
 </template>

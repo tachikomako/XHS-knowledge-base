@@ -41,6 +41,7 @@ const drawerVisible = computed({
   get: () => props.modelValue,
   set: (value) => emit('update:modelValue', value),
 })
+
 function save() {
   emit('save', {
     summary: summary.value.trim() || null,
@@ -51,7 +52,7 @@ function save() {
 }
 
 function formatDate(value: string | null) {
-  if (!value) return '—'
+  if (!value) return '-'
   return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
@@ -65,15 +66,23 @@ function contentStatusLabel(status: string) {
 }
 
 function aiStatusLabel(status: string) {
-  if (status === 'PENDING') return 'AI 待处理'
-  if (status === 'PROCESSING') return 'AI 整理中'
-  if (status === 'COMPLETED') return 'AI 已完成'
   return {
-    NOT_REQUESTED: 'AI 待处理',
-    PENDING: 'AI 整理中',
-    SUCCESS: 'AI 已完成',
+    PENDING: 'AI 待处理',
+    PROCESSING: 'AI 整理中',
+    COMPLETED: 'AI 已完成',
     FAILED: 'AI 失败',
+    NOT_REQUESTED: 'AI 待处理',
+    SUCCESS: 'AI 已完成',
   }[status] || status
+}
+
+function aiReviewHint(item: KnowledgeItem) {
+  if (item.contentStatus !== 'COMPLETED') return '正文待补全，暂不可 AI 整理'
+  if (item.aiStatus === 'PENDING') return 'AI 待处理'
+  if (item.aiStatus === 'FAILED') return 'AI 处理失败，可重试'
+  if (item.aiStatus === 'COMPLETED' && item.aiConfidence !== null && item.aiConfidence < 0.5) return 'AI 已完成，建议人工确认'
+  if (item.aiStatus === 'COMPLETED' && !item.categoryId) return '暂无分类，建议人工整理'
+  return ''
 }
 </script>
 
@@ -106,13 +115,14 @@ function aiStatusLabel(status: string) {
 
       <section class="detail-section editor-section">
         <div class="section-heading"><h2>知识整理</h2><span>{{ aiStatusLabel(item.aiStatus) }}</span></div>
+        <el-alert v-if="aiReviewHint(item)" :title="aiReviewHint(item)" type="info" show-icon :closable="false" />
         <div class="metadata-fields">
           <label>分类
             <el-select v-model="categoryId" clearable placeholder="未分类">
               <el-option
                 v-for="category in categories"
                 :key="category.id"
-                :label="category.parentId ? `　${category.name}` : category.name"
+                :label="category.parentId ? `  ${category.name}` : category.name"
                 :value="category.id"
               />
             </el-select>
@@ -127,7 +137,12 @@ function aiStatusLabel(status: string) {
         <label>我的笔记<el-input v-model="userNote" type="textarea" :rows="6" maxlength="20000" show-word-limit /></label>
         <div class="editor-actions">
           <el-button type="primary" :loading="saving" @click="save">保存整理</el-button>
-          <el-button :icon="MagicStick" :loading="organizing" @click="$emit('organize')">重新 AI 整理</el-button>
+          <el-button
+            :icon="MagicStick"
+            :loading="organizing"
+            :disabled="item.contentStatus !== 'COMPLETED' || item.manualMetadataLocked"
+            @click="$emit('organize')"
+          >重新 AI 整理</el-button>
         </div>
       </section>
 

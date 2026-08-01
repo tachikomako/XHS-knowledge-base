@@ -22,6 +22,7 @@ import type { Category, CategoryInput, CategorySuggestion, SourceTag, Tag } from
 import { clearAiCredentials, fetchLatestSyncRun, fetchSettings, testAiConnection, updateAiSettings } from './api/settings'
 import type { AiSettingsUpdate } from './api/settings'
 import type { SettingsResponse, SyncRunResponse } from './api/settings'
+import { organizePendingFeedback } from './aiFeedback'
 import KnowledgeCard from './components/KnowledgeCard.vue'
 import KnowledgeDetailDrawer from './components/KnowledgeDetailDrawer.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
@@ -235,11 +236,8 @@ async function organizePending() {
   aiOrganizingPending.value = true
   try {
     const result = await organizePendingAi()
-    if (result.message) {
-      ElMessage.warning(result.message)
-    } else {
-      ElMessage.success(`AI 整理完成：成功 ${result.succeeded}，失败 ${result.failed}`)
-    }
+    const feedback = organizePendingFeedback(result)
+    ElMessage[feedback.type](feedback.message)
     await Promise.all([loadItems(), loadMetadata(), loadSettings()])
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '整理待处理内容失败')

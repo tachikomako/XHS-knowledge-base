@@ -1,5 +1,6 @@
 package io.github.tachikomako.xhsknowledge.settings;
 
+import io.github.tachikomako.xhsknowledge.ai.AiEligibilityService;
 import io.github.tachikomako.xhsknowledge.ai.QwenClient;
 import io.github.tachikomako.xhsknowledge.common.ApiException;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,15 +34,18 @@ public class SettingsService {
     private final String envBaseUrl;
     private final String envModel;
     private final Path secretsFile;
+    private final AiEligibilityService aiEligibilityService;
 
     public SettingsService(
             JdbcTemplate jdbcTemplate,
+            AiEligibilityService aiEligibilityService,
             @Value("${qwen.api-key:}") String apiKey,
             @Value("${qwen.base-url:" + DEFAULT_BASE_URL + "}") String baseUrl,
             @Value("${qwen.model:" + DEFAULT_MODEL + "}") String model,
             @Value("${xhs.secrets-dir:./data/secrets}") String secretsDir
     ) {
         this.jdbcTemplate = jdbcTemplate;
+        this.aiEligibilityService = aiEligibilityService;
         this.envApiKey = apiKey;
         this.envBaseUrl = StringUtils.hasText(baseUrl) ? baseUrl : DEFAULT_BASE_URL;
         this.envModel = StringUtils.hasText(model) ? model : DEFAULT_MODEL;
@@ -55,7 +59,7 @@ public class SettingsService {
                 StringUtils.hasText(ai.apiKey()),
                 ai.baseUrl(),
                 ai.model(),
-                aiCount("PENDING", "PROCESSING"),
+                aiEligibilityService.eligibleCount(),
                 aiCount("FAILED")
         );
     }
