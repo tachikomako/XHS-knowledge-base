@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { Delete, Link, RefreshLeft, Upload } from '@element-plus/icons-vue'
 import type { KnowledgeItem } from '../api/items'
+import { proxiedImageUrl } from '../api/media'
 import type { Category, Tag } from '../api/metadata'
 
 const props = defineProps<{
@@ -39,6 +40,7 @@ const drawerVisible = computed({
   get: () => props.modelValue,
   set: (value) => emit('update:modelValue', value),
 })
+const imageUrls = computed(() => props.item?.imageUrls.map(proxiedImageUrl) || [])
 
 function save() {
   emit('save', {
@@ -60,7 +62,7 @@ function formatDate(value: string | null) {
     <div v-if="loading" class="drawer-loading"><el-skeleton :rows="8" animated /></div>
     <article v-else-if="item" class="detail-content">
       <div class="detail-topline">
-        <span>小红书 · {{ item.captureLevel === 'DETAIL' ? '正文快照' : '链接卡片' }}</span>
+        <span>小红书</span>
         <el-button text @click="drawerVisible = false">关闭</el-button>
       </div>
 
@@ -70,21 +72,20 @@ function formatDate(value: string | null) {
         <span>更新于 {{ formatDate(item.updatedAt) }}</span>
       </div>
 
-      <div v-if="item.imageUrls.length" class="image-strip">
+      <div v-if="imageUrls.length" class="image-strip">
         <el-image
-          v-for="image in item.imageUrls"
+          v-for="image in imageUrls"
           :key="image"
           :src="image"
-          :preview-src-list="item.imageUrls"
+          :preview-src-list="imageUrls"
           fit="cover"
           lazy
-          referrerpolicy="no-referrer"
         />
       </div>
 
       <section class="detail-section">
-        <div class="section-heading"><h2>内容快照</h2><span>{{ item.content ? '已保存在本地' : '未采集正文' }}</span></div>
-        <p class="source-content">{{ item.content || '当前记录只有卡片信息，可以打开原帖后再次剪藏以升级为正文快照。' }}</p>
+        <div class="section-heading"><h2>正文</h2><span>{{ item.content ? '已采集' : '未采集' }}</span></div>
+        <p class="source-content">{{ item.content || '当前记录暂未采集正文。' }}</p>
         <a :href="item.originalUrl" target="_blank" rel="noopener noreferrer" class="source-link">
           <el-icon><Link /></el-icon>查看小红书原帖
         </a>

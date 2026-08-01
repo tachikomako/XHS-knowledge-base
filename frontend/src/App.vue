@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Collection, Connection, Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { bulkTrashItems, changeItemLifecycle, getItem, searchItems, updateItem } from './api/items'
-import type { CaptureLevel, KnowledgeItem, LifecycleStatus } from './api/items'
+import type { KnowledgeItem, LifecycleStatus } from './api/items'
 import {
   createCategory,
   createTag,
@@ -33,7 +33,6 @@ const page = ref(1)
 const queryInput = ref('')
 const appliedQuery = ref('')
 const lifecycleStatus = ref<LifecycleStatus>('ACTIVE')
-const captureLevel = ref<CaptureLevel | ''>('')
 const categoryId = ref('')
 const tagId = ref('')
 const sourceType = ref('')
@@ -105,7 +104,7 @@ onBeforeUnmount(() => {
   settingsController?.abort()
 })
 
-watch([lifecycleStatus, captureLevel, categoryId, tagId, sourceType], () => {
+watch([lifecycleStatus, categoryId, tagId, sourceType], () => {
   page.value = 1
   void loadItems()
 })
@@ -123,7 +122,6 @@ async function loadItems() {
       tagId: tagId.value,
       sourceType: sourceType.value,
       lifecycleStatus: lifecycleStatus.value,
-      captureLevel: captureLevel.value,
       page: page.value,
       pageSize: PAGE_SIZE,
     }, controller.signal)
@@ -467,22 +465,9 @@ function replaceItem(updated: KnowledgeItem) {
           <el-radio-button value="ARCHIVED">归档</el-radio-button>
           <el-radio-button value="TRASHED">回收站</el-radio-button>
         </el-radio-group>
-        <el-select v-model="captureLevel" size="large" aria-label="内容完整度" style="width: 150px">
-          <el-option label="全部内容" value="" />
-          <el-option label="正文快照" value="DETAIL" />
-          <el-option label="链接卡片" value="CARD" />
-        </el-select>
         <el-select v-model="sourceType" size="large" aria-label="来源筛选" style="width: 150px">
           <el-option label="全部来源" value="" />
           <el-option label="小红书" value="XIAOHONGSHU" />
-        </el-select>
-        <el-select v-model="categoryId" clearable size="large" placeholder="全部分类" aria-label="分类筛选" style="width: 170px">
-          <el-option
-            v-for="category in orderedCategories"
-            :key="category.id"
-            :label="categoryNames[category.id]"
-            :value="category.id"
-          />
         </el-select>
         <el-select v-model="tagId" clearable filterable size="large" placeholder="全部标签" aria-label="标签筛选" style="width: 160px">
           <el-option v-for="tag in tags" :key="tag.id" :label="`#${tag.name}`" :value="tag.id" />
@@ -497,7 +482,7 @@ function replaceItem(updated: KnowledgeItem) {
 
     <section class="library-body">
       <aside class="category-sidebar" aria-label="分类树">
-        <button type="button" :class="{ active: !categoryId }" @click="selectCategory('')">全部分类</button>
+        <button type="button" :class="{ active: !categoryId }" @click="selectCategory('')">所有</button>
         <div v-for="category in categoryTree" :key="category.id" class="category-branch">
           <button type="button" :class="{ active: categoryId === category.id }" @click="selectCategory(category.id)">
             <span>{{ category.name }}</span><small>{{ category.itemCount }}</small>

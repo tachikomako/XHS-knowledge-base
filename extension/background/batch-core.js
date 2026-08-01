@@ -13,7 +13,7 @@ export function splitImportBatches(items) {
 }
 
 export function createImportSummary() {
-  return { batches: 0, received: 0, created: 0, updated: 0, skipped: 0, failed: 0, results: [] }
+  return { batches: 0, received: 0, created: 0, updated: 0, restored: 0, skipped: 0, failed: 0, results: [] }
 }
 
 export function mergeImportResult(summary, batch) {
@@ -21,6 +21,7 @@ export function mergeImportResult(summary, batch) {
   summary.received += batch.received
   summary.created += batch.created
   summary.updated += batch.updated
+  summary.restored += batch.restored || 0
   summary.skipped += batch.skipped
   summary.failed += batch.failed
   summary.results.push(...batch.results)

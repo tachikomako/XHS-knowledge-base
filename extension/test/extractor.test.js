@@ -128,6 +128,36 @@ test('extracts URL-confirmed favorites without a fixed container', () => {
   assert.deepEqual(result.items.map((item) => item.sourceItemId), ['url-favorite-001', 'url-favorite-002'])
 })
 
+test('ignores profile posts mixed into the favorites tab DOM', () => {
+  const document = parseHTML(`
+    <html><body><main>
+      <a href="/explore/posted-001?xsec_token=posted&amp;xsec_source=pc_profile" title="我发布的帖子"></a>
+      <a href="/explore/favorite-001?xsec_token=favorite&amp;xsec_source=pc_collect" title="收藏的帖子"></a>
+    </main></body></html>
+  `).document
+  const result = extractFavoritesPage(
+    document,
+    'https://www.xiaohongshu.com/user/profile/fixture?tab=fav&subTab=note',
+  )
+
+  assert.deepEqual(result.items.map((item) => item.sourceItemId), ['favorite-001'])
+})
+
+test('extracts image URLs from srcset when lazy image src is empty', () => {
+  const document = parseHTML(`
+    <html><head><title>srcset 图片</title></head><body>
+      <h1 id="detail-title">srcset 图片</h1>
+      <div id="detail-desc">正文</div>
+      <div data-testid="note-image">
+        <img srcset="https://sns-img-qc.xhscdn.com/one.jpg 1x, https://sns-img-qc.xhscdn.com/two.jpg 2x">
+      </div>
+    </body></html>
+  `).document
+  const result = extractCurrentPost(document, 'https://www.xiaohongshu.com/explore/srcset001')
+
+  assert.equal(result.item.coverUrl, 'https://sns-img-qc.xhscdn.com/one.jpg')
+})
+
 test('extracts and deduplicates loaded cards from the favorites page', async () => {
   const document = await loadFixture('favorites-page.html')
   const result = extractFavoritesPage(

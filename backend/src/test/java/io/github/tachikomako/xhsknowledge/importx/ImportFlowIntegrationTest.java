@@ -144,7 +144,8 @@ class ImportFlowIntegrationTest {
                                         + "?xsec_token=restored-token-placeholder&xsec_source=pc_collect"
                         )))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.updated").value(1))
+                .andExpect(jsonPath("$.updated").value(0))
+                .andExpect(jsonPath("$.restored").value(1))
                 .andExpect(jsonPath("$.results[0].status").value("RESTORED"));
 
         mockMvc.perform(get("/api/v1/items/{id}", itemId))

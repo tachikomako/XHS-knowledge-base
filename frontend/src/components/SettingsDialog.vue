@@ -31,7 +31,7 @@ const emit = defineEmits<{
         <el-switch
           :model-value="settings?.aiEnabled || false"
           :loading="saving"
-          :disabled="!settings?.aiConfigured"
+          :disabled="loading"
           @change="$emit('toggleAi', Boolean($event))"
         />
       </section>
@@ -49,7 +49,7 @@ const emit = defineEmits<{
 
       <el-alert
         v-if="settings && !settings.aiConfigured"
-        title="请在后端环境变量中配置 QWEN_API_KEY；浏览器端不会显示或保存 API Key。"
+        title="AI 开关可以先保存；真正整理前仍需在后端环境变量中配置 QWEN_API_KEY。"
         type="warning"
         show-icon
         :closable="false"

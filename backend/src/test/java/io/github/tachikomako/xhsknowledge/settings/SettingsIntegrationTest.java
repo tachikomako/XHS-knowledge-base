@@ -42,7 +42,7 @@ class SettingsIntegrationTest {
     void exposesOnlyAiStatusAndStoresTheSwitchInSqlite() throws Exception {
         mockMvc.perform(get("/api/v1/settings"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.aiEnabled").value(false))
+                .andExpect(jsonPath("$.aiEnabled").value(true))
                 .andExpect(jsonPath("$.aiConfigured").value(true))
                 .andExpect(jsonPath("$.model").value("qwen-test"))
                 .andExpect(content().string(not(containsString("test-secret"))));

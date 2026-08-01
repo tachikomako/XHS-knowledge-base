@@ -78,6 +78,14 @@ extension/test/fixtures/  脱敏 DOM 测试样本
 .\scripts\verify.ps1
 ```
 
+Package the Chrome extension zip:
+
+```powershell
+.\scripts\package-extension.ps1
+```
+
+Release checklist: [docs/release-checklist.md](docs/release-checklist.md).
+
 ## 产品边界
 
 - 本地删除不会取消小红书收藏。
