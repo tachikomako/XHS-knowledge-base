@@ -102,6 +102,9 @@ Release checklist: [docs/release-checklist.md](docs/release-checklist.md).
 - Single-item delete and "清空知识库" are physical local deletes. Clearing removes items and item-level relations/suggestions while keeping categories, tags, settings, sync runs, and import-batch history.
 - Manual favorites/likes sync now records per-item text status and opens detail pages one at a time to fill missing text; failed text extraction is counted and retried on a later manual sync.
 
+- The website settings dialog can safely test Qwen, show pending/failed AI counts, and manually organize pending content; item details can trigger single-item AI reorganization.
+- AI organization has no timer-based scheduler. It runs only after user-triggered import/sync commits content or after an explicit website button click.
+
 ## License
 
 [MIT](LICENSE)

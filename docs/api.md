@@ -51,19 +51,25 @@ Statuses: `RUNNING`, `COMPLETED`, `PARTIAL_FAILED`, `FAILED`.
 - `GET /items`: paginated search. Supports `q`, `categoryId`, `tagId`, `sourceType`, `captureLevel`, `contentStatus`, `aiStatus`, `page`, `pageSize`, and `sort`. Filtering by a root category includes its direct child categories.
 - `GET /items/{id}`: full saved item.
 - `PATCH /items/{id}`: partial edit of `categoryId`, `tagIds`, `summary`, and `userNote`. JSON `null` clears a field.
+- `POST /items/{id}/organize`: user-triggered Qwen organization for one item. Returns the updated item. It requires Qwen to be configured but does not expose provider errors or secrets.
 - `DELETE /items/{id}`: physically delete the item and its tag/AI suggestion links. Categories and public tags are kept.
 - `POST /items/clear`: physically clear the knowledge library. Body: `{ "confirmation": "清空知识库" }`. Deletes `knowledge_items`, `knowledge_item_tags`, `item_source_relations`, and `item_ai_suggestions`; keeps categories, tags, app settings, sync runs, and import batches. Returns `{ "deletedItems": 0 }`.
 
 ## Settings
 
-- `GET /settings`: returns `{ "aiEnabled": true, "aiConfigured": true, "model": "qwen-plus" }`.
+- `GET /settings`: returns `{ "aiEnabled": true, "aiConfigured": true, "model": "qwen-plus", "pendingAiCount": 0, "failedAiCount": 0 }`.
 - `PATCH /settings/ai`: updates the local AI switch. Body: `{ "aiEnabled": true }`.
+- `POST /settings/ai/test`: tests the configured Qwen endpoint and returns `{ "success": true, "configured": true, "model": "qwen-plus", "message": "Qwen connection succeeded" }`. The response never includes the API key or raw provider payload.
 
 `aiConfigured` only means `QWEN_API_KEY` is present on the backend. The API key is never returned by the API, stored in SQLite, or sent to the browser.
 
 ## AI organization
 
 Qwen is configured with backend environment variables: `QWEN_API_KEY`, `QWEN_BASE_URL`, and `QWEN_MODEL`.
+
+- `POST /ai/organize-pending`: user-triggered batch organization for up to 50 active items whose content is `COMPLETED`, metadata is not manually locked, and AI status is `NOT_REQUESTED`, `PENDING`, or `FAILED`. Returns `{ "processed": 0, "succeeded": 0, "failed": 0, "skipped": 0, "message": null }`.
+
+Automatic AI organization only happens after a user-triggered import/manual sync has committed content. There are no timer-based scheduled AI jobs.
 
 The AI result is accepted only when it fits the local knowledge base:
 

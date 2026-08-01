@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Delete, Link } from '@element-plus/icons-vue'
+import { Delete, Link, MagicStick } from '@element-plus/icons-vue'
 import type { KnowledgeItem } from '../api/items'
 import type { Category, Tag } from '../api/metadata'
 
@@ -9,6 +9,7 @@ const props = defineProps<{
   item: KnowledgeItem | null
   loading: boolean
   saving: boolean
+  organizing: boolean
   categories: Category[]
   tags: Tag[]
 }>()
@@ -21,6 +22,7 @@ const emit = defineEmits<{
     tagIds: string[]
   }]
   delete: []
+  organize: []
 }>()
 
 const summary = ref('')
@@ -117,7 +119,10 @@ function aiStatusLabel(status: string) {
         </div>
         <label>摘要<el-input v-model="summary" type="textarea" :rows="3" maxlength="2000" show-word-limit /></label>
         <label>我的笔记<el-input v-model="userNote" type="textarea" :rows="6" maxlength="20000" show-word-limit /></label>
-        <el-button type="primary" :loading="saving" @click="save">保存整理</el-button>
+        <div class="editor-actions">
+          <el-button type="primary" :loading="saving" @click="save">保存整理</el-button>
+          <el-button :icon="MagicStick" :loading="organizing" @click="$emit('organize')">重新 AI 整理</el-button>
+        </div>
       </section>
 
       <section class="detail-actions">

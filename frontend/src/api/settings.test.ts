@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchLatestSyncRun, fetchSettings, updateAiSettings } from './settings'
+import { fetchLatestSyncRun, fetchSettings, testAiConnection, updateAiSettings } from './settings'
 
 describe('settings API', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -29,6 +29,19 @@ describe('settings API', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/settings/ai', expect.objectContaining({
       method: 'PATCH',
       body: JSON.stringify({ aiEnabled: true }),
+    }))
+  })
+
+  it('tests Qwen connection through a safe endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ success: true, configured: true, model: 'qwen-plus', message: 'ok' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(testAiConnection()).resolves.toMatchObject({ success: true, configured: true })
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/settings/ai/test', expect.objectContaining({
+      method: 'POST',
     }))
   })
 

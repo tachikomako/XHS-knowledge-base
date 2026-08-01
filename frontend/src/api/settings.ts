@@ -2,6 +2,15 @@ export interface SettingsResponse {
   aiEnabled: boolean
   aiConfigured: boolean
   model: string
+  pendingAiCount: number
+  failedAiCount: number
+}
+
+export interface AiConnectionTestResponse {
+  success: boolean
+  configured: boolean
+  model: string
+  message: string
 }
 
 export interface SyncRunResponse {
@@ -36,6 +45,10 @@ export function updateAiSettings(aiEnabled: boolean): Promise<SettingsResponse> 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ aiEnabled }),
   })
+}
+
+export function testAiConnection(): Promise<AiConnectionTestResponse> {
+  return requestJson('/api/v1/settings/ai/test', { method: 'POST' })
 }
 
 async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T> {

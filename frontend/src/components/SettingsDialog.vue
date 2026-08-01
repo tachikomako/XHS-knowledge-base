@@ -7,11 +7,15 @@ defineProps<{
   latestSyncRun: SyncRunResponse | null
   loading: boolean
   saving: boolean
+  testingAi: boolean
+  organizingPending: boolean
 }>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   toggleAi: [enabled: boolean]
   reload: []
+  testAi: []
+  organizePending: []
 }>()
 
 function syncStatusLabel(status: SyncRunResponse['status']) {
@@ -55,6 +59,18 @@ function syncStatusLabel(status: SyncRunResponse['status']) {
       <section class="settings-row compact">
         <span>当前模型</span>
         <code>{{ settings?.model || 'qwen-plus' }}</code>
+      </section>
+      <section class="settings-row compact">
+        <span>AI 待处理</span>
+        <strong>{{ settings?.pendingAiCount || 0 }}</strong>
+      </section>
+      <section class="settings-row compact">
+        <span>AI 失败</span>
+        <strong>{{ settings?.failedAiCount || 0 }}</strong>
+      </section>
+      <section class="settings-actions">
+        <el-button :loading="testingAi" @click="$emit('testAi')">测试 Qwen 连接</el-button>
+        <el-button type="primary" :loading="organizingPending" @click="$emit('organizePending')">整理待处理内容</el-button>
       </section>
 
       <section class="settings-note">

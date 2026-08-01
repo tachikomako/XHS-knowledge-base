@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Collection, Connection, Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { clearItems, deleteItem, getItem, searchItems, updateItem } from './api/items'
+import { clearItems, deleteItem, getItem, organizeItem, organizePendingAi, searchItems, updateItem } from './api/items'
 import type { KnowledgeItem } from './api/items'
 import {
   createCategory,
@@ -16,7 +16,7 @@ import {
   updateTag,
 } from './api/metadata'
 import type { Category, CategoryInput, Tag } from './api/metadata'
-import { fetchLatestSyncRun, fetchSettings, updateAiSettings } from './api/settings'
+import { fetchLatestSyncRun, fetchSettings, testAiConnection, updateAiSettings } from './api/settings'
 import type { SettingsResponse, SyncRunResponse } from './api/settings'
 import KnowledgeCard from './components/KnowledgeCard.vue'
 import KnowledgeDetailDrawer from './components/KnowledgeDetailDrawer.vue'
@@ -40,6 +40,7 @@ const listError = ref('')
 const drawerVisible = ref(false)
 const detailLoading = ref(false)
 const detailSaving = ref(false)
+const detailOrganizing = ref(false)
 const selectedItem = ref<KnowledgeItem | null>(null)
 const categories = ref<Category[]>([])
 const tags = ref<Tag[]>([])
@@ -48,6 +49,8 @@ const taxonomyLoading = ref(false)
 const settingsVisible = ref(false)
 const settingsLoading = ref(false)
 const settingsSaving = ref(false)
+const aiTesting = ref(false)
+const aiOrganizingPending = ref(false)
 const settings = ref<SettingsResponse | null>(null)
 const latestSyncRun = ref<SyncRunResponse | null>(null)
 
@@ -178,6 +181,39 @@ async function toggleAi(enabled: boolean) {
   }
 }
 
+async function testAi() {
+  aiTesting.value = true
+  try {
+    const result = await testAiConnection()
+    if (result.success) {
+      ElMessage.success(`Qwen 连接成功：${result.model}`)
+    } else {
+      ElMessage.warning(result.message)
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '测试 Qwen 连接失败')
+  } finally {
+    aiTesting.value = false
+  }
+}
+
+async function organizePending() {
+  aiOrganizingPending.value = true
+  try {
+    const result = await organizePendingAi()
+    if (result.message) {
+      ElMessage.warning(result.message)
+    } else {
+      ElMessage.success(`AI 整理完成：成功 ${result.succeeded}，失败 ${result.failed}`)
+    }
+    await Promise.all([loadItems(), loadMetadata(), loadSettings()])
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '整理待处理内容失败')
+  } finally {
+    aiOrganizingPending.value = false
+  }
+}
+
 function filterByTag(selectedTagId: string) {
   tagId.value = selectedTagId
 }
@@ -239,6 +275,21 @@ async function saveDetails(changes: {
     ElMessage.error(error instanceof Error ? error.message : '保存失败')
   } finally {
     detailSaving.value = false
+  }
+}
+
+async function organizeSelectedItem() {
+  if (!selectedItem.value) return
+  detailOrganizing.value = true
+  try {
+    selectedItem.value = await organizeItem(selectedItem.value.id)
+    replaceItem(selectedItem.value)
+    ElMessage.success('AI 整理已完成')
+    await Promise.all([loadMetadata(), loadItems(), loadSettings()])
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : 'AI 整理失败')
+  } finally {
+    detailOrganizing.value = false
   }
 }
 
@@ -512,9 +563,11 @@ function replaceItem(updated: KnowledgeItem) {
       :item="selectedItem"
       :loading="detailLoading"
       :saving="detailSaving"
+      :organizing="detailOrganizing"
       :categories="orderedCategories"
       :tags="tags"
       @save="saveDetails"
+      @organize="organizeSelectedItem"
       @delete="deleteSelectedItem"
     />
 
@@ -539,8 +592,12 @@ function replaceItem(updated: KnowledgeItem) {
       :latest-sync-run="latestSyncRun"
       :loading="settingsLoading"
       :saving="settingsSaving"
+      :testing-ai="aiTesting"
+      :organizing-pending="aiOrganizingPending"
       @reload="loadSettings"
       @toggle-ai="toggleAi"
+      @test-ai="testAi"
+      @organize-pending="organizePending"
     />
   </main>
 </template>

@@ -22,6 +22,7 @@ flowchart LR
 - Images are intentionally outside the product surface: the extension does not upload image URLs, the backend does not depend on image data, and the website does not render covers or image strips.
 - Clearing the knowledge library is a confirmed physical delete of item rows and their item-level relations only; user taxonomy, settings, and sync history remain.
 - Manual sync runs are created only from the extension button. The run may navigate and scroll favorites/likes once, then it stops.
+- AI organization is only triggered by user actions: import/current clip/manual sync after content is saved, the single-item organize button, or the settings dialog batch organize button. The backend does not run timer-based AI jobs.
 
 ## Capture levels
 
@@ -46,4 +47,5 @@ Favorites and likes are stored as item source relations, so the same Xiaohongshu
 - M5: user-confirmed favorites-page card indexing, client deduplication, and 50-item import batches.
 - M5.1: link-based card-boundary fallback, in-popup rescanning, and content-free selector diagnostics.
 - M6: user-triggered sync runs, favorites/likes source adapters, bounded auto-scroll discovery, and latest sync result display.
-- Next: detail-page content completion queue and retryable content status.
+- M7: detail-page text completion during manual sync, safe Qwen connection testing, and manual single/batch AI organization controls.
+- Next: richer AI review UX and retry visibility for long-running batches.
