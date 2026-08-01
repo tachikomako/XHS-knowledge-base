@@ -59,9 +59,16 @@ public class KnowledgeItemService {
         LambdaQueryWrapper<KnowledgeItemEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(KnowledgeItemEntity::getLifecycleStatus, "ACTIVE");
         if (StringUtils.hasText(categoryId)) {
-            wrapper.and(nested -> nested
-                    .eq(KnowledgeItemEntity::getCategoryId, categoryId)
-                    .or().apply("category_id IN (SELECT id FROM categories WHERE parent_id = {0})", categoryId));
+            if ("__pending__".equals(categoryId)) {
+                wrapper.and(nested -> nested
+                        .isNull(KnowledgeItemEntity::getCategoryId)
+                        .or().eq(KnowledgeItemEntity::getAiStatus, "FAILED")
+                        .or().lt(KnowledgeItemEntity::getAiConfidence, 0.5));
+            } else {
+                wrapper.and(nested -> nested
+                        .eq(KnowledgeItemEntity::getCategoryId, categoryId)
+                        .or().apply("category_id IN (SELECT id FROM categories WHERE parent_id = {0})", categoryId));
+            }
         }
         if (StringUtils.hasText(tagId)) {
             if (tagId.length() > 128) throw badRequest("INVALID_FILTER", "tagId is too long");
@@ -141,6 +148,7 @@ public class KnowledgeItemService {
     public void delete(String id) {
         requireItem(id);
         jdbcTemplate.update("DELETE FROM knowledge_item_tags WHERE item_id = ?", id);
+        jdbcTemplate.update("DELETE FROM knowledge_item_source_tags WHERE item_id = ?", id);
         jdbcTemplate.update("DELETE FROM item_ai_suggestions WHERE item_id = ?", id);
         jdbcTemplate.update("DELETE FROM item_source_relations WHERE item_id = ?", id);
         itemMapper.deleteById(id);
@@ -153,6 +161,7 @@ public class KnowledgeItemService {
         }
         Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM knowledge_items", Integer.class);
         jdbcTemplate.update("DELETE FROM knowledge_item_tags");
+        jdbcTemplate.update("DELETE FROM knowledge_item_source_tags");
         jdbcTemplate.update("DELETE FROM item_source_relations");
         jdbcTemplate.update("DELETE FROM item_ai_suggestions");
         jdbcTemplate.update("DELETE FROM knowledge_items");
@@ -215,6 +224,14 @@ public class KnowledgeItemService {
         );
     }
 
+    private List<String> findSourceTags(String itemId) {
+        return jdbcTemplate.queryForList(
+                "SELECT value FROM knowledge_item_source_tags WHERE item_id = ? ORDER BY lower(value)",
+                String.class,
+                itemId
+        );
+    }
+
     private KnowledgeItemView toView(KnowledgeItemEntity item) {
         return new KnowledgeItemView(
                 item.getId(),
@@ -226,6 +243,7 @@ public class KnowledgeItemService {
                 item.getContent(),
                 item.getContentStatus(),
                 item.getContentLastError(),
+                findSourceTags(item.getId()),
                 item.getAuthor(),
                 item.getCaptureLevel(),
                 item.getSummary(),

@@ -42,5 +42,8 @@ Use this checklist for the first installable MVP build.
 - In website settings, click the Qwen test button and confirm it reports success or a safe generic failure without showing the API key.
 - Click "organize pending content" and confirm only completed-text, unlocked, pending/failed items are processed.
 - Open one saved item and click "reorganize with AI"; confirm the updated summary/category/tag state is visible after the request.
+- Open a detail item containing Xiaohongshu hashtags and confirm the original tags are shown separately from editable tags.
+- In category management, generate AI category suggestions, edit at least one suggested name, confirm, and verify the created categories appear in the sidebar.
+- Click the sidebar "pending" entry and confirm it shows uncategorized or failed/low-confidence AI items rather than the whole library.
 - If Qwen fails, confirm the item remains and `aiStatus` becomes `FAILED`.
 - After manually editing summary/category/tags, confirm later imports do not overwrite that metadata.

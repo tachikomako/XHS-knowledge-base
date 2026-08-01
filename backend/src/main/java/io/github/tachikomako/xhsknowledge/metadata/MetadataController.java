@@ -29,6 +29,21 @@ public class MetadataController {
         return metadataService.listCategories();
     }
 
+    @GetMapping("/categories/source-tags")
+    public List<SourceTagView> listSourceTags() {
+        return metadataService.listSourceTags();
+    }
+
+    @PostMapping("/categories/suggestions")
+    public CategorySuggestionResponse suggestCategories() {
+        return metadataService.suggestCategories();
+    }
+
+    @PostMapping("/categories/suggestions/confirm")
+    public List<CategoryView> confirmCategorySuggestions(@Valid @RequestBody ConfirmCategorySuggestionsRequest request) {
+        return metadataService.confirmCategorySuggestions(request.categories());
+    }
+
     @PostMapping("/categories")
     @ResponseStatus(HttpStatus.CREATED)
     public CategoryView createCategory(@Valid @RequestBody CategoryRequest request) {

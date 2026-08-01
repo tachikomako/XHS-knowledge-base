@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { ArrowDown, ArrowUp, Delete, Edit, Plus } from '@element-plus/icons-vue'
-import type { Category, CategoryInput, Tag } from '../api/metadata'
+import { computed, ref, watch } from 'vue'
+import { ArrowDown, ArrowUp, Delete, Edit, MagicStick, Plus } from '@element-plus/icons-vue'
+import type { Category, CategoryInput, CategorySuggestion, SourceTag, Tag } from '../api/metadata'
 
 const props = defineProps<{
   modelValue: boolean
   categories: Category[]
   tags: Tag[]
+  sourceTags: SourceTag[]
+  suggestions: CategorySuggestion[]
   loading: boolean
+  suggesting: boolean
 }>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -19,13 +22,20 @@ const emit = defineEmits<{
   mergeTag: [sourceTag: Tag, targetTagId: string]
   deleteCategory: [category: Category]
   deleteTag: [tag: Tag]
+  generateSuggestions: []
+  confirmSuggestions: [suggestions: CategorySuggestion[]]
 }>()
 
 const categoryName = ref('')
 const categoryParentId = ref<string | null>(null)
 const tagName = ref('')
 const mergeTargetIds = ref<Record<string, string>>({})
+const editableSuggestions = ref<CategorySuggestion[]>([])
 const rootCategories = computed(() => props.categories.filter((category) => !category.parentId))
+
+watch(() => props.suggestions, (suggestions) => {
+  editableSuggestions.value = suggestions.map((suggestion) => ({ ...suggestion }))
+}, { immediate: true })
 
 function submitCategory() {
   const name = categoryName.value.trim()
@@ -59,6 +69,19 @@ function mergeTag(tag: Tag, targetTagId: string | number | boolean | unknown[]) 
   emit('mergeTag', tag, targetTagId)
   mergeTargetIds.value[tag.id] = ''
 }
+
+function confirmSuggestions() {
+  const suggestions = editableSuggestions.value
+    .map((suggestion) => ({
+      ...suggestion,
+      name: suggestion.name.trim(),
+      definition: suggestion.definition?.trim() || '',
+      scope: suggestion.scope?.trim() || '',
+      exclusions: suggestion.exclusions?.trim() || '',
+    }))
+    .filter((suggestion) => suggestion.name)
+  if (suggestions.length) emit('confirmSuggestions', suggestions)
+}
 </script>
 
 <template>
@@ -70,7 +93,20 @@ function mergeTag(tag: Tag, targetTagId: string | number | boolean | unknown[]) 
   >
     <div v-loading="loading" class="taxonomy-layout">
       <section class="taxonomy-section">
-        <div class="taxonomy-heading"><div><h3>分类</h3><p>稳定的层级结构，每篇帖子选择一个。</p></div></div>
+        <div class="taxonomy-heading">
+          <div><h3>分类</h3><p>稳定的层级结构，每篇帖子选择一个。</p></div>
+          <el-button :icon="MagicStick" :loading="suggesting" @click="$emit('generateSuggestions')">AI 建议</el-button>
+        </div>
+        <div v-if="sourceTags.length" class="source-tags">
+          <span v-for="tag in sourceTags.slice(0, 10)" :key="tag.name">#{{ tag.name }} <small>{{ tag.itemCount }}</small></span>
+        </div>
+        <div v-if="editableSuggestions.length" class="category-suggestions">
+          <div v-for="(suggestion, index) in editableSuggestions" :key="index" class="suggestion-row">
+            <el-input v-model="suggestion.name" maxlength="50" />
+            <el-input v-model="suggestion.definition" maxlength="300" placeholder="定义" />
+          </div>
+          <el-button type="primary" @click="confirmSuggestions">确认创建分类</el-button>
+        </div>
         <form class="taxonomy-create category-create" @submit.prevent="submitCategory">
           <el-input v-model="categoryName" maxlength="50" placeholder="新分类名称" />
           <el-select v-model="categoryParentId" clearable placeholder="作为一级分类" style="width: 170px">

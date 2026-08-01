@@ -259,12 +259,20 @@ export function extractCurrentPost(document, pageUrl, capturedAt = new Date()) {
       title,
       author,
       text,
+      sourceTags: extractSourceTags(text),
       contentStatus: text ? 'COMPLETED' : 'FAILED',
       contentLastError: text ? null : 'Content text was not found on the detail page',
       captureLevel: text ? 'DETAIL' : 'CARD',
       capturedAt: capturedAt.toISOString(),
     },
   }
+}
+
+function extractSourceTags(text) {
+  return [...new Set(String(text || '').match(/#[\p{L}\p{N}_-]{1,50}/gu) || [])]
+    .map((tag) => tag.replace(/^#+/u, '').trim())
+    .filter(Boolean)
+    .slice(0, 30)
 }
 
 function firstText(document, selectors) {

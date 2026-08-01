@@ -63,6 +63,14 @@ CREATE TABLE IF NOT EXISTS knowledge_item_tags (
     FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS knowledge_item_source_tags (
+    item_id TEXT NOT NULL,
+    value TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (item_id, value),
+    FOREIGN KEY (item_id) REFERENCES knowledge_items(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS item_source_relations (
     item_id TEXT NOT NULL,
     source TEXT NOT NULL,

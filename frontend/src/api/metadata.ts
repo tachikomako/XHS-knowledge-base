@@ -18,8 +18,37 @@ export interface CategoryInput {
   sortOrder: number
 }
 
+export interface SourceTag {
+  name: string
+  itemCount: number
+}
+
+export interface CategorySuggestion {
+  name: string
+  definition: string
+  scope: string
+  exclusions: string
+}
+
+export interface CategorySuggestionResponse {
+  suggestions: CategorySuggestion[]
+  sourceTags: SourceTag[]
+}
+
 export function fetchCategories(signal?: AbortSignal): Promise<Category[]> {
   return requestJson('/api/v1/categories', { signal })
+}
+
+export function fetchSourceTags(signal?: AbortSignal): Promise<SourceTag[]> {
+  return requestJson('/api/v1/categories/source-tags', { signal })
+}
+
+export function generateCategorySuggestions(): Promise<CategorySuggestionResponse> {
+  return requestJson('/api/v1/categories/suggestions', { method: 'POST' })
+}
+
+export function confirmCategorySuggestions(categories: CategorySuggestion[]): Promise<Category[]> {
+  return requestJson('/api/v1/categories/suggestions/confirm', jsonRequest('POST', { categories }))
 }
 
 export function createCategory(input: CategoryInput): Promise<Category> {

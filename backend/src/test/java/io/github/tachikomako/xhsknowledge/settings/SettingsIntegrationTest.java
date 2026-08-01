@@ -44,6 +44,7 @@ class SettingsIntegrationTest {
     @BeforeEach
     void cleanSettings() {
         jdbcTemplate.update("DELETE FROM app_settings");
+        jdbcTemplate.update("DELETE FROM knowledge_item_source_tags");
         jdbcTemplate.update("DELETE FROM knowledge_items");
     }
 

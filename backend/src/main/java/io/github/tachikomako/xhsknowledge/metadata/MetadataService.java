@@ -1,5 +1,9 @@
 package io.github.tachikomako.xhsknowledge.metadata;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.tachikomako.xhsknowledge.ai.QwenCategorySuggestions;
+import io.github.tachikomako.xhsknowledge.ai.QwenClient;
 import io.github.tachikomako.xhsknowledge.common.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -18,9 +22,13 @@ import java.util.UUID;
 public class MetadataService {
 
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
+    private final QwenClient qwenClient;
 
-    public MetadataService(JdbcTemplate jdbcTemplate) {
+    public MetadataService(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, QwenClient qwenClient) {
         this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper;
+        this.qwenClient = qwenClient;
     }
 
     public List<CategoryView> listCategories() {
@@ -54,6 +62,55 @@ public class MetadataService {
                 result.getString("name"),
                 result.getLong("item_count")
         ));
+    }
+
+    public List<SourceTagView> listSourceTags() {
+        return jdbcTemplate.query("""
+                SELECT value, COUNT(DISTINCT item_id) AS item_count
+                FROM knowledge_item_source_tags
+                GROUP BY value
+                ORDER BY item_count DESC, lower(value)
+                LIMIT 50
+                """, (result, row) -> new SourceTagView(
+                result.getString("value"),
+                result.getLong("item_count")
+        ));
+    }
+
+    public CategorySuggestionResponse suggestCategories() {
+        if (!qwenClient.configured()) {
+            throw badRequest("AI_NOT_CONFIGURED", "Qwen API key is not configured");
+        }
+        try {
+            QwenCategorySuggestions result = qwenClient.suggestCategories(categoryPrompt());
+            List<CategorySuggestion> suggestions = result.categories() == null ? List.of() : result.categories().stream()
+                    .map(this::cleanSuggestion)
+                    .filter(suggestion -> StringUtils.hasText(suggestion.name()))
+                    .limit(12)
+                    .toList();
+            return new CategorySuggestionResponse(suggestions, listSourceTags());
+        } catch (ApiException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "AI_CATEGORY_SUGGESTION_FAILED", "AI category suggestion failed");
+        }
+    }
+
+    @Transactional
+    public List<CategoryView> confirmCategorySuggestions(List<CategorySuggestion> suggestions) {
+        int sortOrder = nextRootSortOrder();
+        for (CategorySuggestion suggestion : suggestions) {
+            String name = cleanName(suggestion.name(), false);
+            if (categoryExists(name)) continue;
+            String id = UUID.randomUUID().toString();
+            String timestamp = now();
+            jdbcTemplate.update(
+                    "INSERT INTO categories(id, name, parent_id, sort_order, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, ?)",
+                    id, name, sortOrder, timestamp, timestamp
+            );
+            sortOrder += 10;
+        }
+        return listCategories();
     }
 
     @Transactional
@@ -159,6 +216,69 @@ public class MetadataService {
                 .filter(category -> category.id().equals(id))
                 .findFirst()
                 .orElseThrow(() -> notFound("CATEGORY_NOT_FOUND", "Category not found"));
+    }
+
+    private String categoryPrompt() throws JsonProcessingException {
+        return """
+                Based on the current Xiaohongshu knowledge base, propose 7 to 10 stable root categories.
+                Return JSON only:
+                {"categories":[{"name":"category name","definition":"short definition","scope":"what belongs here","exclusions":"what does not belong here"}]}
+                Do not reuse tiny one-off tags as categories. Do not create duplicate names.
+
+                Existing categories:
+                %s
+
+                Source tag frequencies:
+                %s
+
+                Content samples:
+                %s
+                """.formatted(
+                objectMapper.writeValueAsString(jdbcTemplate.queryForList("SELECT name FROM categories ORDER BY lower(name)")),
+                objectMapper.writeValueAsString(listSourceTags()),
+                objectMapper.writeValueAsString(contentSamples())
+        );
+    }
+
+    private List<?> contentSamples() {
+        return jdbcTemplate.queryForList("""
+                SELECT title, author, substr(coalesce(content, ''), 1, 500) AS content
+                FROM knowledge_items
+                WHERE lifecycle_status = 'ACTIVE' AND content_status = 'COMPLETED'
+                ORDER BY updated_at DESC
+                LIMIT 30
+                """);
+    }
+
+    private CategorySuggestion cleanSuggestion(CategorySuggestion suggestion) {
+        return new CategorySuggestion(
+                limit(suggestion.name(), 50),
+                limit(suggestion.definition(), 300),
+                limit(suggestion.scope(), 300),
+                limit(suggestion.exclusions(), 300)
+        );
+    }
+
+    private boolean categoryExists(String name) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM categories WHERE parent_id IS NULL AND lower(name) = lower(?)",
+                Integer.class,
+                name
+        );
+        return count != null && count > 0;
+    }
+
+    private int nextRootSortOrder() {
+        Integer max = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(MAX(sort_order), -10) FROM categories WHERE parent_id IS NULL",
+                Integer.class
+        );
+        return (max == null ? -10 : max) + 10;
+    }
+
+    private String limit(String value, int max) {
+        String normalized = trimToNull(value);
+        return normalized == null ? "" : normalized.substring(0, Math.min(max, normalized.length()));
     }
 
     private TagView findTag(String id) {

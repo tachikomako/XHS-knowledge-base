@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createCategory, createTag, deleteTag, fetchCategories, mergeTag, updateCategory } from './metadata'
+import {
+  confirmCategorySuggestions,
+  createCategory,
+  createTag,
+  deleteTag,
+  fetchCategories,
+  fetchSourceTags,
+  generateCategorySuggestions,
+  mergeTag,
+  updateCategory,
+} from './metadata'
 
 describe('metadata API', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -30,6 +40,24 @@ describe('metadata API', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/v1/tags/tag%2Fsource/merge', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ targetTagId: 'tag/target' }),
+    }))
+  })
+
+  it('loads source tags and confirms category suggestions', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ name: 'AI', itemCount: 2 }] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ suggestions: [{ name: 'AI 与编程' }], sourceTags: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchSourceTags()
+    await generateCategorySuggestions()
+    await confirmCategorySuggestions([{ name: 'AI 与编程', definition: '', scope: '', exclusions: '' }])
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/categories/source-tags', expect.anything())
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/categories/suggestions', expect.objectContaining({ method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/v1/categories/suggestions/confirm', expect.objectContaining({
+      method: 'POST',
     }))
   })
 

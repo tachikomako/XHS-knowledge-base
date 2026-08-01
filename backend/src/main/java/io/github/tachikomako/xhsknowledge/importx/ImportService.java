@@ -69,6 +69,7 @@ public class ImportService {
             try {
                 ImportResponse.ItemResult result = upsert(index, incoming);
                 recordSourceRelation(result.itemId(), incoming.sourceRelation());
+                replaceSourceTags(result.itemId(), incoming.sourceTags());
                 results.add(result);
                 switch (result.status()) {
                     case "CREATED" -> {
@@ -144,6 +145,7 @@ public class ImportService {
         }
         if (!"ACTIVE".equals(existing.getLifecycleStatus())) {
             jdbcTemplate.update("DELETE FROM knowledge_item_tags WHERE item_id = ?", existing.getId());
+            jdbcTemplate.update("DELETE FROM knowledge_item_source_tags WHERE item_id = ?", existing.getId());
             jdbcTemplate.update("DELETE FROM item_ai_suggestions WHERE item_id = ?", existing.getId());
             jdbcTemplate.update("DELETE FROM item_source_relations WHERE item_id = ?", existing.getId());
             itemMapper.deleteById(existing.getId());
@@ -319,6 +321,22 @@ public class ImportService {
                 source,
                 now()
         );
+    }
+
+    private void replaceSourceTags(String itemId, List<String> sourceTags) {
+        if (sourceTags == null) return;
+        jdbcTemplate.update("DELETE FROM knowledge_item_source_tags WHERE item_id = ?", itemId);
+        sourceTags.stream()
+                .map(this::trimToNull)
+                .filter(Objects::nonNull)
+                .distinct()
+                .limit(30)
+                .forEach(tag -> jdbcTemplate.update(
+                        "INSERT OR IGNORE INTO knowledge_item_source_tags(item_id, value, created_at) VALUES (?, ?, ?)",
+                        itemId,
+                        tag.substring(0, Math.min(50, tag.length())),
+                        now()
+                ));
     }
 
     private ImportResponse fromPrevious(ImportBatchEntity batch) {
