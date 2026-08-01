@@ -12,6 +12,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -94,7 +95,7 @@ class ImportFlowIntegrationTest {
     }
 
     @Test
-    void restoresTrashedItemsBeforeReimportWithoutPermanentDeletion() throws Exception {
+    void physicallyDeletesItemAndAllowsReimportWithSameNoteId() throws Exception {
         String categoryId = "category-fixture";
         String tagId = "tag-fixture";
         jdbcTemplate.update(
@@ -129,40 +130,16 @@ class ImportFlowIntegrationTest {
                 .andExpect(jsonPath("$.tagIds[0]").value(tagId))
                 .andExpect(jsonPath("$.manualMetadataLocked").value(true));
 
-        mockMvc.perform(post("/api/v1/items/{id}/trash", itemId))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.lifecycleStatus").value("TRASHED"));
-
-        mockMvc.perform(post("/api/v1/imports/xiaohongshu")
-                        .header("X-Extension-Token", TOKEN)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(importJson(
-                                "batch-after-trash",
-                                "DETAIL",
-                                "更长的新正文",
-                                "https://www.xiaohongshu.com/explore/abc123"
-                                        + "?xsec_token=restored-token-placeholder&xsec_source=pc_collect"
-                        )))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.updated").value(0))
-                .andExpect(jsonPath("$.restored").value(1))
-                .andExpect(jsonPath("$.results[0].status").value("RESTORED"));
-
+        mockMvc.perform(delete("/api/v1/items/{id}", itemId))
+                .andExpect(status().isNoContent());
         mockMvc.perform(get("/api/v1/items/{id}", itemId))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.lifecycleStatus").value("ACTIVE"))
-                .andExpect(jsonPath("$.originalUrl").value(
-                        "https://www.xiaohongshu.com/explore/abc123"
-                                + "?xsec_token=restored-token-placeholder&xsec_source=pc_collect"
-                ))
-                .andExpect(jsonPath("$.summary").value("我的摘要"))
-                .andExpect(jsonPath("$.userNote").value("稍后实践"))
-                .andExpect(jsonPath("$.categoryId").value(categoryId))
-                .andExpect(jsonPath("$.tagIds[0]").value(tagId));
-
+                .andExpect(status().isNotFound());
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM knowledge_items WHERE id = ?", Integer.class, itemId
+        )).isZero();
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM knowledge_item_tags WHERE item_id = ?", Integer.class, itemId
-        )).isOne();
+        )).isZero();
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM categories WHERE id = ?", Integer.class, categoryId
         )).isOne();
@@ -175,10 +152,11 @@ class ImportFlowIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(importJson("batch-after-delete", "DETAIL", "重新导入")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.skipped").value(1))
+                .andExpect(jsonPath("$.created").value(1))
+                .andExpect(jsonPath("$.results[0].status").value("CREATED"))
                 .andReturn().getResponse().getContentAsString();
         assertThat(objectMapper.readTree(reimportBody).path("results").path(0).path("itemId").asText())
-                .isEqualTo(itemId);
+                .isNotEqualTo(itemId);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM knowledge_items WHERE source_item_id = 'abc123'", Integer.class
         )).isOne();

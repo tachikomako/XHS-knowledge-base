@@ -16,9 +16,9 @@ flowchart LR
 
 - The extension extracts visible DOM only after a user action. It never uploads cookies, credentials, or verification data.
 - The service worker owns backend requests. Content scripts only produce normalized JSON.
-- The backend owns validation, URL normalization, idempotency, lifecycle rules, and persistence.
+- The backend owns validation, URL normalization, idempotency, physical deletion, and persistence.
 - The website is the main management UI. The extension popup stays focused on capture and connection status.
-- Local lifecycle state is independent from Xiaohongshu. Trashing an item locally does not remove the platform favorite.
+- Local deletion is independent from Xiaohongshu. Deleting an item locally does not remove the platform favorite; the next manual sync may recreate it.
 
 ## Capture levels
 
@@ -32,9 +32,9 @@ The persisted model uses `sourceType`, `sourceItemId`, and `canonicalUrl`. Only 
 ## Current milestones
 
 - M0: backend health API, Vue shell, Manifest V3 connection popup.
-- M1: SQLite storage, token-protected idempotent import, item query/update/lifecycle APIs.
+- M1: SQLite storage, token-protected idempotent import, item query/update/delete APIs.
 - M2: user-triggered current-post preview and clipping with sanitized DOM fixture tests.
-- M3: knowledge-base search, detail view, manual notes, archive, trash, and restore UI.
+- M3: knowledge-base search, detail view, manual notes, and physical delete UI.
 - M4: user-managed two-level categories, cross-category tags, item assignment, and taxonomy filters.
 - M5: user-confirmed favorites-page card indexing, client deduplication, and 50-item import batches.
 - M5.1: link-based card-boundary fallback, in-popup rescanning, and content-free selector diagnostics.

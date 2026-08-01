@@ -19,8 +19,6 @@ const emit = defineEmits<{
   mergeTag: [sourceTag: Tag, targetTagId: string]
   deleteCategory: [category: Category]
   deleteTag: [tag: Tag]
-  clearCategory: [category: Category]
-  clearLibrary: []
 }>()
 
 const categoryName = ref('')
@@ -84,7 +82,6 @@ function mergeTag(tag: Tag, targetTagId: string | number | boolean | unknown[]) 
           <div v-for="category in categories" :key="category.id" class="taxonomy-row">
             <span>{{ categoryLabel(category) }}<small>{{ category.itemCount }} 条</small></span>
             <div>
-              <el-button text type="danger" aria-label="清空此分类" @click="$emit('clearCategory', category)">清空</el-button>
               <el-button text :icon="ArrowUp" :disabled="!canMove(category, -1)" aria-label="上移分类" @click="$emit('moveCategory', category, -1)" />
               <el-button text :icon="ArrowDown" :disabled="!canMove(category, 1)" aria-label="下移分类" @click="$emit('moveCategory', category, 1)" />
               <el-button text :icon="Edit" aria-label="重命名分类" @click="$emit('editCategory', category)" />
@@ -125,8 +122,5 @@ function mergeTag(tag: Tag, targetTagId: string | number | boolean | unknown[]) 
         <el-empty v-else :image-size="60" description="还没有标签" />
       </section>
     </div>
-    <template #footer>
-      <el-button type="danger" plain @click="$emit('clearLibrary')">清空整个知识库</el-button>
-    </template>
   </el-dialog>
 </template>

@@ -2,8 +2,6 @@ package io.github.tachikomako.xhsknowledge.item;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.tachikomako.xhsknowledge.common.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -21,22 +19,18 @@ import java.util.Set;
 @Service
 public class KnowledgeItemService {
 
-    private static final Set<String> LIFECYCLE_STATUSES = Set.of("ACTIVE", "ARCHIVED", "TRASHED");
     private static final Set<String> CAPTURE_LEVELS = Set.of("CARD", "DETAIL");
     private static final Set<String> AI_STATUSES = Set.of("NOT_REQUESTED", "PENDING", "SUCCESS", "FAILED");
 
     private final KnowledgeItemMapper itemMapper;
     private final JdbcTemplate jdbcTemplate;
-    private final ObjectMapper objectMapper;
 
     public KnowledgeItemService(
             KnowledgeItemMapper itemMapper,
-            JdbcTemplate jdbcTemplate,
-            ObjectMapper objectMapper
+            JdbcTemplate jdbcTemplate
     ) {
         this.itemMapper = itemMapper;
         this.jdbcTemplate = jdbcTemplate;
-        this.objectMapper = objectMapper;
     }
 
     public PageResponse<KnowledgeItemView> search(
@@ -45,7 +39,6 @@ public class KnowledgeItemService {
             String tagId,
             String sourceType,
             String captureLevel,
-            String lifecycleStatus,
             String aiStatus,
             int page,
             int pageSize,
@@ -56,14 +49,12 @@ public class KnowledgeItemService {
         }
         validateOptional(captureLevel, CAPTURE_LEVELS, "captureLevel");
         validateOptional(aiStatus, AI_STATUSES, "aiStatus");
-        validateOptional(lifecycleStatus, LIFECYCLE_STATUSES, "lifecycleStatus");
         if (StringUtils.hasText(query) && query.length() > 200) {
             throw badRequest("QUERY_TOO_LONG", "q must not exceed 200 characters");
         }
 
         LambdaQueryWrapper<KnowledgeItemEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(KnowledgeItemEntity::getLifecycleStatus,
-                StringUtils.hasText(lifecycleStatus) ? lifecycleStatus : "ACTIVE");
+        wrapper.eq(KnowledgeItemEntity::getLifecycleStatus, "ACTIVE");
         if (StringUtils.hasText(categoryId)) {
             wrapper.and(nested -> nested
                     .eq(KnowledgeItemEntity::getCategoryId, categoryId)
@@ -143,53 +134,11 @@ public class KnowledgeItemService {
     }
 
     @Transactional
-    public KnowledgeItemView changeLifecycle(String id, String targetStatus) {
-        if (!LIFECYCLE_STATUSES.contains(targetStatus)) {
-            throw badRequest("INVALID_LIFECYCLE", "Unsupported lifecycle status");
-        }
-        KnowledgeItemEntity item = requireItem(id);
-        if (!targetStatus.equals(item.getLifecycleStatus())) {
-            item.setLifecycleStatus(targetStatus);
-            item.setUpdatedAt(now());
-            itemMapper.updateById(item);
-        }
-        return toView(item);
-    }
-
-    @Transactional
-    public int bulkTrash(String scope, String categoryId) {
-        String timestamp = now();
-        if ("ALL".equals(scope)) {
-            if (categoryId != null) {
-                throw badRequest("INVALID_BULK_SCOPE", "categoryId must be omitted when scope is ALL");
-            }
-            return jdbcTemplate.update(
-                    "UPDATE knowledge_items SET lifecycle_status = 'TRASHED', updated_at = ? "
-                            + "WHERE lifecycle_status <> 'TRASHED'",
-                    timestamp
-            );
-        }
-
-        String normalizedCategoryId = trimToNull(categoryId);
-        if (!"CATEGORY".equals(scope) || normalizedCategoryId == null) {
-            throw badRequest("INVALID_BULK_SCOPE", "scope must be ALL or CATEGORY with a categoryId");
-        }
-        if (!categoryExists(normalizedCategoryId)) {
-            throw badRequest("UNKNOWN_CATEGORY", "categoryId does not exist");
-        }
-        return jdbcTemplate.update(
-                """
-                UPDATE knowledge_items
-                SET lifecycle_status = 'TRASHED', updated_at = ?
-                WHERE lifecycle_status <> 'TRASHED'
-                  AND (category_id = ? OR category_id IN (
-                    SELECT id FROM categories WHERE parent_id = ?
-                  ))
-                """,
-                timestamp,
-                normalizedCategoryId,
-                normalizedCategoryId
-        );
+    public void delete(String id) {
+        requireItem(id);
+        jdbcTemplate.update("DELETE FROM knowledge_item_tags WHERE item_id = ?", id);
+        jdbcTemplate.update("DELETE FROM item_ai_suggestions WHERE item_id = ?", id);
+        itemMapper.deleteById(id);
     }
 
     private KnowledgeItemEntity requireItem(String id) {
@@ -259,7 +208,7 @@ public class KnowledgeItemService {
                 item.getContent(),
                 item.getAuthor(),
                 item.getCoverUrl(),
-                readImages(item.getImageUrlsJson()),
+                List.of(),
                 item.getCaptureLevel(),
                 item.getSummary(),
                 item.getUserNote(),
@@ -275,14 +224,6 @@ public class KnowledgeItemService {
                 item.getUserEditedAt(),
                 item.getUpdatedAt()
         );
-    }
-
-    private List<String> readImages(String json) {
-        try {
-            return objectMapper.readValue(json, new TypeReference<>() { });
-        } catch (Exception exception) {
-            return List.of();
-        }
     }
 
     private void applySort(LambdaQueryWrapper<KnowledgeItemEntity> wrapper, String sort) {

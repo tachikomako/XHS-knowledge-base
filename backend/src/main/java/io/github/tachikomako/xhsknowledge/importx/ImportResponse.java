@@ -8,7 +8,6 @@ public record ImportResponse(
         int received,
         int created,
         int updated,
-        int restored,
         int skipped,
         int failed,
         List<ItemResult> results

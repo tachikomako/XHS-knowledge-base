@@ -23,7 +23,6 @@ Base path: `/api/v1`. JSON uses UTF-8. Import requests require `X-Extension-Toke
       "author": "Example author",
       "text": "Visible post text",
       "coverUrl": "https://example.invalid/cover.jpg",
-      "imageUrls": [],
       "captureLevel": "DETAIL",
       "capturedAt": "2026-07-25T12:00:00+08:00"
     }
@@ -31,19 +30,16 @@ Base path: `/api/v1`. JSON uses UTF-8. Import requests require `X-Extension-Toke
 }
 ```
 
-The server limits each batch to 50 items. Reusing `clientBatchId` replays the stored summary instead of importing again. Items are deduplicated by source ID and then canonical URL.
+The server limits each batch to 50 items. Reusing `clientBatchId` replays the stored summary instead of importing again. Items are deduplicated by source ID and then canonical URL. `coverUrl` is optional and non-critical; image lists are ignored.
 
-When AI is enabled and Qwen is configured, successfully created, updated, or restored items are saved first, then organized in a background task. AI failure never rolls back the import.
+When AI is enabled and Qwen is configured, successfully created or updated items are saved first, then organized in a background task. AI failure never rolls back the import.
 
 ## Items
 
-- `GET /items`: paginated search. Supports `q`, `categoryId`, `tagId`, `sourceType`, `captureLevel`, `lifecycleStatus`, `aiStatus`, `page`, `pageSize`, and `sort`. Filtering by a root category includes its direct child categories.
+- `GET /items`: paginated search. Supports `q`, `categoryId`, `tagId`, `sourceType`, `captureLevel`, `aiStatus`, `page`, `pageSize`, and `sort`. Filtering by a root category includes its direct child categories.
 - `GET /items/{id}`: full saved item.
 - `PATCH /items/{id}`: partial edit of `categoryId`, `tagIds`, `summary`, and `userNote`. JSON `null` clears a field.
-- `POST /items/{id}/archive`: move to archive.
-- `POST /items/{id}/trash`: hide locally while retaining the source tombstone.
-- `POST /items/{id}/restore`: return to active items.
-- `POST /items/bulk-trash`: move all non-trashed items, or one category subtree, to trash. Body: `{ "scope": "ALL" }` or `{ "scope": "CATEGORY", "categoryId": "..." }`.
+- `DELETE /items/{id}`: physically delete the item and its tag/AI suggestion links. Categories and public tags are kept.
 
 ## Settings
 

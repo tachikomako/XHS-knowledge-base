@@ -30,7 +30,7 @@ Use this checklist for the first installable MVP build.
 - Scan `tab=fav&subTab=note`.
 - Sync the same post twice and confirm only one item exists.
 - Open the saved item and confirm "view original post" keeps the complete `xsec_token` URL behavior.
-- Move a category to trash and restore an item from the trash.
+- Delete a saved item and confirm it disappears from the database; sync it again and confirm it is recreated.
 - With AI disabled, import saves raw content only.
 - With AI enabled and Qwen configured, import creates background summary/category/tag metadata.
 - If Qwen fails, confirm the item remains and `aiStatus` becomes `FAILED`.

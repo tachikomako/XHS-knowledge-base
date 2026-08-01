@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Delete, Link, RefreshLeft, Upload } from '@element-plus/icons-vue'
+import { Delete, Link } from '@element-plus/icons-vue'
 import type { KnowledgeItem } from '../api/items'
-import { proxiedImageUrl } from '../api/media'
 import type { Category, Tag } from '../api/metadata'
 
 const props = defineProps<{
@@ -21,7 +20,7 @@ const emit = defineEmits<{
     categoryId: string | null
     tagIds: string[]
   }]
-  lifecycle: [action: 'archive' | 'trash' | 'restore']
+  delete: []
 }>()
 
 const summary = ref('')
@@ -40,8 +39,6 @@ const drawerVisible = computed({
   get: () => props.modelValue,
   set: (value) => emit('update:modelValue', value),
 })
-const imageUrls = computed(() => props.item?.imageUrls.map(proxiedImageUrl) || [])
-
 function save() {
   emit('save', {
     summary: summary.value.trim() || null,
@@ -70,17 +67,6 @@ function formatDate(value: string | null) {
       <div class="detail-byline">
         <span>{{ item.author || '未知作者' }}</span>
         <span>更新于 {{ formatDate(item.updatedAt) }}</span>
-      </div>
-
-      <div v-if="imageUrls.length" class="image-strip">
-        <el-image
-          v-for="image in imageUrls"
-          :key="image"
-          :src="image"
-          :preview-src-list="imageUrls"
-          fit="cover"
-          lazy
-        />
       </div>
 
       <section class="detail-section">
@@ -116,9 +102,7 @@ function formatDate(value: string | null) {
       </section>
 
       <section class="detail-actions">
-        <el-button v-if="item.lifecycleStatus === 'ACTIVE'" :icon="Upload" @click="$emit('lifecycle', 'archive')">归档</el-button>
-        <el-button v-if="item.lifecycleStatus !== 'TRASHED'" type="danger" plain :icon="Delete" @click="$emit('lifecycle', 'trash')">移入回收站</el-button>
-        <el-button v-if="item.lifecycleStatus !== 'ACTIVE'" type="success" plain :icon="RefreshLeft" @click="$emit('lifecycle', 'restore')">恢复到知识库</el-button>
+        <el-button type="danger" plain :icon="Delete" @click="$emit('delete')">删除</el-button>
       </section>
     </article>
   </el-drawer>

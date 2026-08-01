@@ -110,49 +110,6 @@ class MetadataIntegrationTest {
     }
 
     @Test
-    void bulkTrashSupportsCategoryTreesAndTheWholeLibrary() throws Exception {
-        String rootId = createCategory("学习", null);
-        String childId = createCategory("英语", rootId);
-        String otherId = createCategory("其他", null);
-        String childItemId = importItem("bulk-child-batch", "bulkchild123");
-        String otherItemId = importItem("bulk-other-batch", "bulkother123");
-
-        mockMvc.perform(patch("/api/v1/items/{id}", childItemId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"categoryId\":\"%s\"}".formatted(childId)))
-                .andExpect(status().isOk());
-        mockMvc.perform(patch("/api/v1/items/{id}", otherItemId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"categoryId\":\"%s\"}".formatted(otherId)))
-                .andExpect(status().isOk());
-
-        mockMvc.perform(post("/api/v1/items/bulk-trash")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"scope\":\"CATEGORY\",\"categoryId\":\"%s\"}".formatted(rootId)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.affected").value(1));
-        assertThat(lifecycleOf(childItemId)).isEqualTo("TRASHED");
-        assertThat(lifecycleOf(otherItemId)).isEqualTo("ACTIVE");
-
-        mockMvc.perform(post("/api/v1/items/bulk-trash")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"scope\":\"ALL\",\"categoryId\":\"%s\"}".formatted(rootId)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_BULK_SCOPE"));
-
-        mockMvc.perform(post("/api/v1/items/bulk-trash")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"scope\":\"ALL\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.affected").value(1));
-        mockMvc.perform(post("/api/v1/items/bulk-trash")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"scope\":\"ALL\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.affected").value(0));
-    }
-
-    @Test
     void mergesTagsWithoutDuplicatingItemLinks() throws Exception {
         String sourceTagId = createTag("source");
         String targetTagId = createTag("target");
@@ -235,13 +192,5 @@ class MetadataIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("results").path(0).path("itemId").asText();
-    }
-
-    private String lifecycleOf(String itemId) {
-        return jdbcTemplate.queryForObject(
-                "SELECT lifecycle_status FROM knowledge_items WHERE id = ?",
-                String.class,
-                itemId
-        );
     }
 }
