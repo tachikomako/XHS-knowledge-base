@@ -35,6 +35,8 @@ test('extracts a visible current post into the backend contract', async () => {
     title: '用 AI 整理英语学习资料',
     author: '示例作者',
     text: '这是一份用于自动化测试的脱敏正文。 #英语 #AI #教程',
+    contentStatus: 'COMPLETED',
+    contentLastError: null,
     captureLevel: 'DETAIL',
     capturedAt: '2026-07-25T04:00:00.000Z',
   })
@@ -165,6 +167,7 @@ test('does not include image fields in the backend contract', () => {
 
   assert.equal(Object.hasOwn(result.item, 'coverUrl'), false)
   assert.equal(Object.hasOwn(result.item, 'imageUrls'), false)
+  assert.equal(result.item.contentStatus, 'COMPLETED')
 })
 
 test('extracts and deduplicates loaded cards from the favorites page', async () => {

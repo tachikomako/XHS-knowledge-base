@@ -17,11 +17,12 @@ describe('knowledge item API', () => {
       tagId: 'tag-1',
       sourceType: 'XIAOHONGSHU',
       captureLevel: '',
+      contentStatus: 'FAILED',
       page: 2,
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/items?q=Agent&categoryId=category-1&tagId=tag-1&sourceType=XIAOHONGSHU&page=2&pageSize=12&sort=updatedAt%2Cdesc',
+      '/api/v1/items?q=Agent&categoryId=category-1&tagId=tag-1&sourceType=XIAOHONGSHU&contentStatus=FAILED&page=2&pageSize=12&sort=updatedAt%2Cdesc',
       expect.objectContaining({ signal: undefined }),
     )
   })

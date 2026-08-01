@@ -10,6 +10,8 @@ public record KnowledgeItemView(
         String originalUrl,
         String title,
         String content,
+        String contentStatus,
+        String contentLastError,
         String author,
         String captureLevel,
         String summary,

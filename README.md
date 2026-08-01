@@ -100,6 +100,7 @@ Release checklist: [docs/release-checklist.md](docs/release-checklist.md).
 - The knowledge-base website does not render imported visual media.
 - The extension import contract only sends note/source URL, title, author, text, source relation, capture level, tags/metadata where available, and timestamps; image URLs are not uploaded.
 - Single-item delete and "清空知识库" are physical local deletes. Clearing removes items and item-level relations/suggestions while keeping categories, tags, settings, sync runs, and import-batch history.
+- Manual favorites/likes sync now records per-item text status and opens detail pages one at a time to fill missing text; failed text extraction is counted and retried on a later manual sync.
 
 ## License
 

@@ -259,6 +259,8 @@ export function extractCurrentPost(document, pageUrl, capturedAt = new Date()) {
       title,
       author,
       text,
+      contentStatus: text ? 'COMPLETED' : 'FAILED',
+      contentLastError: text ? null : 'Content text was not found on the detail page',
       captureLevel: text ? 'DETAIL' : 'CARD',
       capturedAt: capturedAt.toISOString(),
     },

@@ -181,6 +181,7 @@ button, input, textarea { font: inherit; }
 .section-heading h2 { margin: 0; font-size: 16px; }
 .section-heading span { color: #8b847a; font-size: 11px; }
 .source-content { margin: 16px 0; color: #514c45; white-space: pre-wrap; line-height: 1.8; }
+.status-error { margin: 12px 0 0; color: #a84c3d; font-size: 12px; line-height: 1.6; }
 .source-link { display: inline-flex; align-items: center; gap: 6px; color: #5f7452; font-size: 13px; font-weight: 700; text-decoration: none; }
 .editor-section { display: grid; gap: 16px; }
 .editor-section label { display: grid; gap: 7px; color: #5d574f; font-size: 12px; font-weight: 700; }

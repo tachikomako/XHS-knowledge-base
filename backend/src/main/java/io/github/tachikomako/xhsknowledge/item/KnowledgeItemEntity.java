@@ -15,6 +15,8 @@ public class KnowledgeItemEntity {
     private String originalUrl;
     private String title;
     private String content;
+    private String contentStatus;
+    private String contentLastError;
     private String author;
     private String coverUrl;
     private String imageUrlsJson;
@@ -46,6 +48,10 @@ public class KnowledgeItemEntity {
     public void setTitle(String title) { this.title = title; }
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
+    public String getContentStatus() { return contentStatus; }
+    public void setContentStatus(String contentStatus) { this.contentStatus = contentStatus; }
+    public String getContentLastError() { return contentLastError; }
+    public void setContentLastError(String contentLastError) { this.contentLastError = contentLastError; }
     public String getAuthor() { return author; }
     public void setAuthor(String author) { this.author = author; }
     public String getCoverUrl() { return coverUrl; }

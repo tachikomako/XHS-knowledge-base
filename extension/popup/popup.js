@@ -246,6 +246,7 @@ function renderManualSyncResult(response) {
     `新增 ${result.created}`,
     `更新 ${result.updated}`,
     `未变 ${result.skipped}`,
+    `正文 ${run.contentCompletedCount}/${run.contentCompletedCount + run.contentFailedCount}`,
     `失败 ${result.failed}`,
   ].join(' · ')
   renderSyncResult(message, run.status === 'COMPLETED' ? 'success' : 'error')
@@ -266,7 +267,7 @@ function renderLatestSync(run) {
     latestSync.textContent = '最近同步：暂无记录'
     return
   }
-  latestSync.textContent = `最近同步：${syncStatusLabel(run.status)} · 发现 ${run.discoveredCount} · 新增 ${run.createdCount} · 更新 ${run.updatedCount} · 未变 ${run.unchangedCount}`
+  latestSync.textContent = `最近同步：${syncStatusLabel(run.status)} · 发现 ${run.discoveredCount} · 新增 ${run.createdCount} · 更新 ${run.updatedCount} · 未变 ${run.unchangedCount} · 正文 ${run.contentCompletedCount}/${run.contentCompletedCount + run.contentFailedCount}`
 }
 
 function syncStatusLabel(status) {

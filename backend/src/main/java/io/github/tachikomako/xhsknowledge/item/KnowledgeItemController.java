@@ -30,6 +30,7 @@ public class KnowledgeItemController {
             @RequestParam(required = false) String sourceType,
             @RequestParam(required = false) String captureLevel,
             @RequestParam(required = false) String aiStatus,
+            @RequestParam(required = false) String contentStatus,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize,
             @RequestParam(defaultValue = "updatedAt,desc") String sort
@@ -41,6 +42,7 @@ public class KnowledgeItemController {
                 sourceType,
                 captureLevel,
                 aiStatus,
+                contentStatus,
                 page,
                 pageSize,
                 sort

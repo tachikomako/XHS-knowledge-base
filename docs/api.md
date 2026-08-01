@@ -36,6 +36,8 @@ When AI is enabled and Qwen is configured, successfully created or updated items
 
 `sourceRelation` is optional and records whether a note came from favorites, likes, or both without duplicating the knowledge item.
 
+`contentStatus` is optional on import and can be `DISCOVERED`, `COMPLETED`, or `FAILED`. List-card imports default to `DISCOVERED`; detail-page imports with text become `COMPLETED`; failures can be recorded with `contentLastError`.
+
 ## Manual sync runs
 
 - `POST /sync-runs`: create a user-triggered sync task. Body: `{ "requestedSources": ["FAVORITE", "LIKED"] }`. Requires `X-Extension-Token`.
@@ -46,7 +48,7 @@ Statuses: `RUNNING`, `COMPLETED`, `PARTIAL_FAILED`, `FAILED`.
 
 ## Items
 
-- `GET /items`: paginated search. Supports `q`, `categoryId`, `tagId`, `sourceType`, `captureLevel`, `aiStatus`, `page`, `pageSize`, and `sort`. Filtering by a root category includes its direct child categories.
+- `GET /items`: paginated search. Supports `q`, `categoryId`, `tagId`, `sourceType`, `captureLevel`, `contentStatus`, `aiStatus`, `page`, `pageSize`, and `sort`. Filtering by a root category includes its direct child categories.
 - `GET /items/{id}`: full saved item.
 - `PATCH /items/{id}`: partial edit of `categoryId`, `tagIds`, `summary`, and `userNote`. JSON `null` clears a field.
 - `DELETE /items/{id}`: physically delete the item and its tag/AI suggestion links. Categories and public tags are kept.
