@@ -26,19 +26,22 @@ public class AiOrganizationService {
     private final ObjectMapper objectMapper;
     private final SettingsService settingsService;
     private final QwenClient qwenClient;
+    private final AiEligibilityService aiEligibilityService;
 
     public AiOrganizationService(
             KnowledgeItemMapper itemMapper,
             JdbcTemplate jdbcTemplate,
             ObjectMapper objectMapper,
             SettingsService settingsService,
-            QwenClient qwenClient
+            QwenClient qwenClient,
+            AiEligibilityService aiEligibilityService
     ) {
         this.itemMapper = itemMapper;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.settingsService = settingsService;
         this.qwenClient = qwenClient;
+        this.aiEligibilityService = aiEligibilityService;
     }
 
     @Async
@@ -68,13 +71,20 @@ public class AiOrganizationService {
     }
 
     public AiOrganizeBatchResponse organizePending() {
+        AiEligibilityService.AiEligibilityStats stats = aiEligibilityService.stats();
+        if (!settingsService.aiEnabled()) {
+            return batchResponse(stats, 0, 0, 0, 0, "AI 整理尚未开启");
+        }
         if (!qwenClient.configured()) {
-            return new AiOrganizeBatchResponse(0, 0, 0, pendingItemIds().size(), "Qwen API key is not configured");
+            return batchResponse(stats, 0, 0, 0, 0, "请先在设置中配置并测试 Qwen API");
+        }
+        List<String> itemIds = aiEligibilityService.eligibleItemIds(50);
+        if (itemIds.isEmpty()) {
+            return batchResponse(stats, 0, 0, 0, 0, noEligibleMessage(stats));
         }
         int processed = 0;
         int succeeded = 0;
         int failed = 0;
-        List<String> itemIds = pendingItemIds();
         for (String itemId : itemIds) {
             processed++;
             try {
@@ -84,7 +94,14 @@ public class AiOrganizationService {
                 failed++;
             }
         }
-        return new AiOrganizeBatchResponse(processed, succeeded, failed, 0, null);
+        return batchResponse(
+                stats,
+                processed,
+                succeeded,
+                failed,
+                Math.max(0, stats.eligible() - processed),
+                "已处理 %d 条，成功 %d 条，失败 %d 条".formatted(processed, succeeded, failed)
+        );
     }
 
     @Transactional
@@ -134,17 +151,34 @@ public class AiOrganizationService {
                 """, limit(exception.getMessage(), 200), now(), itemId);
     }
 
-    private List<String> pendingItemIds() {
-        return jdbcTemplate.queryForList("""
-                SELECT id
-                FROM knowledge_items
-                WHERE lifecycle_status = 'ACTIVE'
-                  AND content_status = 'COMPLETED'
-                  AND manual_metadata_locked = 0
-                  AND ai_status IN ('PENDING', 'PROCESSING', 'FAILED')
-                ORDER BY updated_at DESC
-                LIMIT 50
-                """, String.class);
+    private AiOrganizeBatchResponse batchResponse(
+            AiEligibilityService.AiEligibilityStats stats,
+            int processed,
+            int succeeded,
+            int failed,
+            int skipped,
+            String message
+    ) {
+        return new AiOrganizeBatchResponse(
+                stats.eligible(),
+                processed,
+                succeeded,
+                failed,
+                stats.blockedByContent(),
+                stats.blockedByManualLock(),
+                skipped,
+                message
+        );
+    }
+
+    private String noEligibleMessage(AiEligibilityService.AiEligibilityStats stats) {
+        if (stats.blockedByContent() > 0) {
+            return "没有可整理内容，请先完成正文同步";
+        }
+        if (stats.blockedByManualLock() > 0) {
+            return "待处理内容已被用户手动锁定";
+        }
+        return "当前没有需要 AI 整理的内容";
     }
 
     private String prompt(KnowledgeItemEntity item) throws JsonProcessingException {

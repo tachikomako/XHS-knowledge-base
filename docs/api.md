@@ -71,7 +71,7 @@ Qwen Base URL/model are saved in SQLite settings. The API key is saved only in `
 
 Qwen can be configured from the settings dialog. Backend environment variables `QWEN_API_KEY`, `QWEN_BASE_URL`, and `QWEN_MODEL` are kept as fallback compatibility settings.
 
-- `POST /ai/organize-pending`: user-triggered batch organization for up to 50 active items whose content is `COMPLETED`, metadata is not manually locked, and AI status is `PENDING`, `PROCESSING`, or `FAILED`. Returns `{ "processed": 0, "succeeded": 0, "failed": 0, "skipped": 0, "message": null }`.
+- `POST /ai/organize-pending`: user-triggered batch organization for up to 50 active items whose content is `COMPLETED`, metadata is not manually locked, and AI status is `PENDING` or `FAILED`. `PROCESSING` items are not claimed again. Returns `{ "eligible": 0, "processed": 0, "succeeded": 0, "failed": 0, "blockedByContent": 0, "blockedByManualLock": 0, "skipped": 0, "message": "当前没有需要 AI 整理的内容" }`.
 
 AI status values are `PENDING`, `PROCESSING`, `COMPLETED`, and `FAILED`. Startup migration maps older `NOT_REQUESTED` rows to `PENDING` and older `SUCCESS` rows to `COMPLETED`.
 

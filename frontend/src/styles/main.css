@@ -168,6 +168,7 @@ button, input, textarea { font: inherit; }
 .card-tags button { padding: 4px 7px; border: 0; border-radius: 999px; color: #5f7452; background: #e9efe5; cursor: pointer; font-size: 10px; }
 .card-tags button:hover { background: #dce7d6; }
 .card-footer { margin-top: 17px; padding-top: 13px; border-top: 1px solid #ede8df; }
+.card-status { margin-top: 10px; color: #8a6335; font-size: 11px; line-height: 1.5; }
 .has-note { color: #657858; font-weight: 700; }
 .pagination { justify-content: center; margin-top: 32px; }
 
