@@ -70,7 +70,9 @@ Statuses: `RUNNING`, `COMPLETED`, `PARTIAL_FAILED`, `FAILED`.
 
 Qwen is configured with backend environment variables: `QWEN_API_KEY`, `QWEN_BASE_URL`, and `QWEN_MODEL`.
 
-- `POST /ai/organize-pending`: user-triggered batch organization for up to 50 active items whose content is `COMPLETED`, metadata is not manually locked, and AI status is `NOT_REQUESTED`, `PENDING`, or `FAILED`. Returns `{ "processed": 0, "succeeded": 0, "failed": 0, "skipped": 0, "message": null }`.
+- `POST /ai/organize-pending`: user-triggered batch organization for up to 50 active items whose content is `COMPLETED`, metadata is not manually locked, and AI status is `PENDING`, `PROCESSING`, or `FAILED`. Returns `{ "processed": 0, "succeeded": 0, "failed": 0, "skipped": 0, "message": null }`.
+
+AI status values are `PENDING`, `PROCESSING`, `COMPLETED`, and `FAILED`. Startup migration maps older `NOT_REQUESTED` rows to `PENDING` and older `SUCCESS` rows to `COMPLETED`.
 
 Automatic AI organization only happens after a user-triggered import/manual sync has committed content. There are no timer-based scheduled AI jobs.
 

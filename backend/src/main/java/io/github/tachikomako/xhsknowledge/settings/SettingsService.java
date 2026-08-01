@@ -34,7 +34,7 @@ public class SettingsService {
                 aiEnabled(),
                 StringUtils.hasText(apiKey),
                 model,
-                aiCount("NOT_REQUESTED", "PENDING"),
+                aiCount("PENDING", "PROCESSING"),
                 aiCount("FAILED")
         );
     }

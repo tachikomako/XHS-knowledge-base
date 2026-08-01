@@ -185,7 +185,7 @@ class ImportFlowIntegrationTest {
         );
         jdbcTemplate.update(
                 "INSERT INTO sync_runs(id, requested_sources, status, started_at) VALUES (?, ?, ?, ?)",
-                "clear-sync-run", "[\"FAVORITE\"]", "SUCCESS", "2026-08-01T00:00:00Z"
+                "clear-sync-run", "[\"FAVORITE\"]", "COMPLETED", "2026-08-01T00:00:00Z"
         );
 
         String body = mockMvc.perform(post("/api/v1/imports/xiaohongshu")

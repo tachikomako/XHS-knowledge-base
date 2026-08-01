@@ -76,7 +76,7 @@ class AiOrganizationServiceTest {
         );
         assertThat(item.get("summary")).isEqualTo("这是一个适合收藏的 AI Agent 教程。");
         assertThat(item.get("category_id")).isEqualTo(categoryId);
-        assertThat(item.get("ai_status")).isEqualTo("SUCCESS");
+        assertThat(item.get("ai_status")).isEqualTo("COMPLETED");
         assertThat((Number) item.get("ai_confidence")).hasToString("1.0");
         assertThat(jdbcTemplate.queryForList(
                 "SELECT tag_id FROM knowledge_item_tags WHERE item_id = ?", String.class, itemId
@@ -152,7 +152,7 @@ class AiOrganizationServiceTest {
 
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT ai_status FROM knowledge_items WHERE id = ?", String.class, itemId
-        )).isEqualTo("SUCCESS");
+        )).isEqualTo("COMPLETED");
         verify(qwenClient, atLeastOnce()).organize(anyString());
     }
 
