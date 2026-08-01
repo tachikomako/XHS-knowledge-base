@@ -54,6 +54,14 @@ export interface UpdateKnowledgeItem {
   tagIds?: string[]
 }
 
+export interface AiOrganizeBatchResponse {
+  processed: number
+  succeeded: number
+  failed: number
+  skipped: number
+  message: string | null
+}
+
 export async function searchItems(
   params: ItemSearchParams = {},
   signal?: AbortSignal,
@@ -81,6 +89,14 @@ export function updateItem(id: string, changes: UpdateKnowledgeItem): Promise<Kn
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(changes),
   })
+}
+
+export function organizeItem(id: string): Promise<KnowledgeItem> {
+  return requestJson(`/api/v1/items/${encodeURIComponent(id)}/organize`, { method: 'POST' })
+}
+
+export function organizePendingAi(): Promise<AiOrganizeBatchResponse> {
+  return requestJson('/api/v1/ai/organize-pending', { method: 'POST' })
 }
 
 export async function deleteItem(id: string): Promise<void> {

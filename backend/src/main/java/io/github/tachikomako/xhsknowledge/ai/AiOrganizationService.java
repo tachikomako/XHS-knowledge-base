@@ -2,9 +2,11 @@ package io.github.tachikomako.xhsknowledge.ai;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.tachikomako.xhsknowledge.common.ApiException;
 import io.github.tachikomako.xhsknowledge.item.KnowledgeItemEntity;
 import io.github.tachikomako.xhsknowledge.item.KnowledgeItemMapper;
 import io.github.tachikomako.xhsknowledge.settings.SettingsService;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -58,6 +60,41 @@ public class AiOrganizationService {
         }
     }
 
+    public void organizeManually(String itemId) {
+        if (!qwenClient.configured()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AI_NOT_CONFIGURED", "Qwen API key is not configured");
+        }
+        try {
+            markPending(itemId);
+            organizeNow(itemId);
+        } catch (ApiException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            markFailed(itemId, exception);
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "AI_ORGANIZE_FAILED", "AI organization failed");
+        }
+    }
+
+    public AiOrganizeBatchResponse organizePending() {
+        if (!qwenClient.configured()) {
+            return new AiOrganizeBatchResponse(0, 0, 0, pendingItemIds().size(), "Qwen API key is not configured");
+        }
+        int processed = 0;
+        int succeeded = 0;
+        int failed = 0;
+        List<String> itemIds = pendingItemIds();
+        for (String itemId : itemIds) {
+            processed++;
+            try {
+                organizeManually(itemId);
+                succeeded++;
+            } catch (Exception exception) {
+                failed++;
+            }
+        }
+        return new AiOrganizeBatchResponse(processed, succeeded, failed, 0, null);
+    }
+
     @Transactional
     public void organizeNow(String itemId) throws Exception {
         KnowledgeItemEntity item = itemMapper.selectById(itemId);
@@ -104,6 +141,19 @@ public class AiOrganizationService {
                 SET ai_status = 'FAILED', ai_last_error = ?, updated_at = ?
                 WHERE id = ? AND manual_metadata_locked = 0
                 """, limit(exception.getMessage(), 200), now(), itemId);
+    }
+
+    private List<String> pendingItemIds() {
+        return jdbcTemplate.queryForList("""
+                SELECT id
+                FROM knowledge_items
+                WHERE lifecycle_status = 'ACTIVE'
+                  AND content_status = 'COMPLETED'
+                  AND manual_metadata_locked = 0
+                  AND ai_status IN ('NOT_REQUESTED', 'PENDING', 'FAILED')
+                ORDER BY updated_at DESC
+                LIMIT 50
+                """, String.class);
     }
 
     private String prompt(KnowledgeItemEntity item) throws JsonProcessingException {

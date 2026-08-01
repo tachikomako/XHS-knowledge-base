@@ -1,5 +1,6 @@
 package io.github.tachikomako.xhsknowledge.item;
 
+import io.github.tachikomako.xhsknowledge.ai.AiOrganizationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,9 +18,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class KnowledgeItemController {
 
     private final KnowledgeItemService itemService;
+    private final AiOrganizationService aiOrganizationService;
 
-    public KnowledgeItemController(KnowledgeItemService itemService) {
+    public KnowledgeItemController(KnowledgeItemService itemService, AiOrganizationService aiOrganizationService) {
         this.itemService = itemService;
+        this.aiOrganizationService = aiOrganizationService;
     }
 
     @GetMapping
@@ -65,6 +68,12 @@ public class KnowledgeItemController {
     @PostMapping("/clear")
     public ClearItemsResponse clear(@RequestBody ClearItemsRequest request) {
         return new ClearItemsResponse(itemService.clear(request == null ? null : request.confirmation()));
+    }
+
+    @PostMapping("/{id}/organize")
+    public KnowledgeItemView organize(@PathVariable String id) {
+        aiOrganizationService.organizeManually(id);
+        return itemService.get(id);
     }
 
     @DeleteMapping("/{id}")

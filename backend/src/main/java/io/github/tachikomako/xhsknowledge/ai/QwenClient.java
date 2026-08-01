@@ -36,6 +36,28 @@ public class QwenClient {
         return StringUtils.hasText(apiKey);
     }
 
+    public String model() {
+        return model;
+    }
+
+    public void testConnection() {
+        restClient.post()
+                .uri("/chat/completions")
+                .headers(headers -> headers.setBearerAuth(apiKey))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of(
+                        "model", model,
+                        "temperature", 0,
+                        "max_tokens", 8,
+                        "messages", List.of(
+                                Map.of("role", "system", "content", "Return a short plain text health check."),
+                                Map.of("role", "user", "content", "ping")
+                        )
+                ))
+                .retrieve()
+                .toBodilessEntity();
+    }
+
     public QwenAiResult organize(String prompt) throws Exception {
         JsonNode response = restClient.post()
                 .uri("/chat/completions")

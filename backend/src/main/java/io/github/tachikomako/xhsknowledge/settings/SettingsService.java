@@ -1,5 +1,6 @@
 package io.github.tachikomako.xhsknowledge.settings;
 
+import io.github.tachikomako.xhsknowledge.ai.QwenClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -29,7 +30,25 @@ public class SettingsService {
     }
 
     public SettingsView get() {
-        return new SettingsView(aiEnabled(), StringUtils.hasText(apiKey), model);
+        return new SettingsView(
+                aiEnabled(),
+                StringUtils.hasText(apiKey),
+                model,
+                aiCount("NOT_REQUESTED", "PENDING"),
+                aiCount("FAILED")
+        );
+    }
+
+    public AiConnectionTestResponse testAiConnection(QwenClient qwenClient) {
+        if (!qwenClient.configured()) {
+            return new AiConnectionTestResponse(false, false, qwenClient.model(), "Qwen API key is not configured");
+        }
+        try {
+            qwenClient.testConnection();
+            return new AiConnectionTestResponse(true, true, qwenClient.model(), "Qwen connection succeeded");
+        } catch (Exception exception) {
+            return new AiConnectionTestResponse(false, true, qwenClient.model(), "Qwen connection failed");
+        }
     }
 
     public boolean aiEnabled() {
@@ -52,5 +71,19 @@ public class SettingsService {
 
     private String now() {
         return OffsetDateTime.now(ZoneOffset.UTC).toString();
+    }
+
+    private int aiCount(String... statuses) {
+        String placeholders = String.join(",", java.util.Collections.nCopies(statuses.length, "?"));
+        Object[] args = statuses;
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM knowledge_items
+                WHERE lifecycle_status = 'ACTIVE'
+                  AND content_status = 'COMPLETED'
+                  AND manual_metadata_locked = 0
+                  AND ai_status IN (%s)
+                """.formatted(placeholders), Integer.class, args);
+        return count == null ? 0 : count;
     }
 }

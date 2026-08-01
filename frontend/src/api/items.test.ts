@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { clearItems, deleteItem, searchItems, updateItem } from './items'
+import { clearItems, deleteItem, organizeItem, organizePendingAi, searchItems, updateItem } from './items'
 
 describe('knowledge item API', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -56,6 +56,23 @@ describe('knowledge item API', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/items/clear', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ confirmation: '清空知识库' }),
+    }))
+  })
+
+  it('sends manual AI organization requests', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'item/1', aiStatus: 'SUCCESS' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ processed: 1, succeeded: 1, failed: 0, skipped: 0 }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await organizeItem('item/1')
+    await organizePendingAi()
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/items/item%2F1/organize', expect.objectContaining({
+      method: 'POST',
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/ai/organize-pending', expect.objectContaining({
+      method: 'POST',
     }))
   })
 

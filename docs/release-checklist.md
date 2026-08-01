@@ -39,5 +39,8 @@ Use this checklist for the first installable MVP build.
 - Reopen the popup or website settings dialog and confirm the latest sync result is visible.
 - With AI disabled, import saves raw content only.
 - With AI enabled and Qwen configured, import creates background summary/category/tag metadata.
+- In website settings, click the Qwen test button and confirm it reports success or a safe generic failure without showing the API key.
+- Click "organize pending content" and confirm only completed-text, unlocked, pending/failed items are processed.
+- Open one saved item and click "reorganize with AI"; confirm the updated summary/category/tag state is visible after the request.
 - If Qwen fails, confirm the item remains and `aiStatus` becomes `FAILED`.
 - After manually editing summary/category/tags, confirm later imports do not overwrite that metadata.

@@ -16,6 +16,8 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -129,6 +131,53 @@ class AiOrganizationServiceTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM item_ai_suggestions WHERE item_id = ?", Integer.class, itemId
         )).isZero();
+    }
+
+    @Test
+    void manuallyOrganizesSingleItemFromApi() throws Exception {
+        String categoryId = insertCategory("AI");
+        String itemId = importItem();
+        when(qwenClient.configured()).thenReturn(true);
+        when(qwenClient.organize(anyString())).thenReturn(new QwenAiResult(
+                "AI summary",
+                categoryId,
+                List.of(),
+                List.of(),
+                0.9
+        ));
+
+        mockMvc.perform(post("/api/v1/items/{id}/organize", itemId))
+                .andExpect(status().isOk());
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT ai_status FROM knowledge_items WHERE id = ?", String.class, itemId
+        )).isEqualTo("SUCCESS");
+        verify(qwenClient, atLeastOnce()).organize(anyString());
+    }
+
+    @Test
+    void manuallyOrganizesPendingItemsInBatches() throws Exception {
+        String categoryId = insertCategory("AI");
+        String itemId = importItem();
+        jdbcTemplate.update("UPDATE knowledge_items SET ai_status = 'FAILED' WHERE id = ?", itemId);
+        when(qwenClient.configured()).thenReturn(true);
+        when(qwenClient.organize(anyString())).thenReturn(new QwenAiResult(
+                "Recovered summary",
+                categoryId,
+                List.of(),
+                List.of(),
+                0.8
+        ));
+
+        mockMvc.perform(post("/api/v1/ai/organize-pending"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.processed").value(1))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.succeeded").value(1))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.failed").value(0));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT summary FROM knowledge_items WHERE id = ?", String.class, itemId
+        )).isEqualTo("Recovered summary");
     }
 
     private String insertCategory(String name) {
