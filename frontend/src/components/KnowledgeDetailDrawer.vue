@@ -65,6 +65,9 @@ function contentStatusLabel(status: string) {
 }
 
 function aiStatusLabel(status: string) {
+  if (status === 'PENDING') return 'AI 待处理'
+  if (status === 'PROCESSING') return 'AI 整理中'
+  if (status === 'COMPLETED') return 'AI 已完成'
   return {
     NOT_REQUESTED: 'AI 待处理',
     PENDING: 'AI 整理中',

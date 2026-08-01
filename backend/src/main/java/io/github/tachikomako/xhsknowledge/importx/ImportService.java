@@ -180,7 +180,7 @@ public class ImportService {
         item.setCoverUrl(null);
         item.setImageUrlsJson("[]");
         item.setCaptureLevel(incoming.captureLevel());
-        item.setAiStatus("NOT_REQUESTED");
+        item.setAiStatus("PENDING");
         item.setLifecycleStatus("ACTIVE");
         item.setManualMetadataLocked(0);
         item.setCreatedAt(timestamp);

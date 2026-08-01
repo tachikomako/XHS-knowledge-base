@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import type { SettingsResponse, SyncRunResponse } from '../api/settings'
+import { reactive, watch } from 'vue'
+import type { AiSettingsUpdate, SettingsResponse, SyncRunResponse } from '../api/settings'
 
-defineProps<{
+const MASKED_KEY = '••••••••••••••••'
+
+const props = defineProps<{
   modelValue: boolean
   settings: SettingsResponse | null
   latestSyncRun: SyncRunResponse | null
@@ -12,11 +15,36 @@ defineProps<{
 }>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  toggleAi: [enabled: boolean]
+  saveAi: [value: AiSettingsUpdate]
   reload: []
   testAi: []
+  clearAiKey: []
   organizePending: []
 }>()
+
+const form = reactive({
+  aiEnabled: false,
+  apiKey: '',
+  baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  model: 'qwen-plus',
+})
+
+watch(() => props.settings, (settings) => {
+  if (!settings) return
+  form.aiEnabled = settings.aiEnabled
+  form.apiKey = ''
+  form.baseUrl = settings.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+  form.model = settings.model || 'qwen-plus'
+}, { immediate: true })
+
+function save() {
+  emit('saveAi', {
+    aiEnabled: form.aiEnabled,
+    apiKey: form.apiKey.trim(),
+    baseUrl: form.baseUrl.trim(),
+    model: form.model.trim(),
+  })
+}
 
 function syncStatusLabel(status: SyncRunResponse['status']) {
   return {
@@ -32,45 +60,62 @@ function syncStatusLabel(status: SyncRunResponse['status']) {
   <el-dialog
     :model-value="modelValue"
     title="设置"
-    width="min(520px, calc(100% - 24px))"
+    width="min(560px, calc(100% - 24px))"
     @update:model-value="$emit('update:modelValue', $event)"
     @open="$emit('reload')"
   >
     <div v-loading="loading" class="settings-layout">
-      <section class="settings-row">
-        <div>
-          <h3>AI 整理</h3>
-          <p>开启后，新导入或更新的内容会在后台尝试生成摘要、分类和标签。</p>
+      <section class="settings-block">
+        <div class="settings-row">
+          <div>
+            <h3>AI 自动整理</h3>
+            <p>开启后，新导入或更新的内容会在后台尝试生成摘要、分类和标签。</p>
+          </div>
+          <el-switch v-model="form.aiEnabled" :disabled="loading || saving" />
         </div>
-        <el-switch
-          :model-value="settings?.aiEnabled || false"
-          :loading="saving"
-          :disabled="loading"
-          @change="$emit('toggleAi', Boolean($event))"
-        />
+
+        <el-form label-position="top" class="ai-form" @submit.prevent>
+          <el-form-item label="Qwen API Key">
+            <el-input
+              v-model="form.apiKey"
+              type="password"
+              show-password
+              :placeholder="settings?.aiConfigured ? MASKED_KEY : 'sk-xxxx'"
+              autocomplete="off"
+            />
+          </el-form-item>
+          <el-form-item label="Qwen Base URL" required>
+            <el-input v-model="form.baseUrl" autocomplete="off" />
+          </el-form-item>
+          <el-form-item label="Qwen Model" required>
+            <el-input v-model="form.model" autocomplete="off" />
+          </el-form-item>
+        </el-form>
+
+        <section class="settings-row compact">
+          <span>配置状态</span>
+          <el-tag :type="settings?.aiConfigured ? 'success' : 'info'">
+            {{ settings?.aiConfigured ? '已配置' : '未配置' }}
+          </el-tag>
+        </section>
+        <section class="settings-row compact">
+          <span>AI 待处理</span>
+          <strong>{{ settings?.pendingAiCount || 0 }}</strong>
+        </section>
+        <section class="settings-row compact">
+          <span>AI 失败</span>
+          <strong>{{ settings?.failedAiCount || 0 }}</strong>
+        </section>
+
+        <section class="settings-actions">
+          <el-button type="primary" :loading="saving" @click="save">保存并测试</el-button>
+          <el-button :loading="testingAi" @click="$emit('testAi')">测试连接</el-button>
+          <el-button type="danger" plain :disabled="!settings?.aiConfigured" :loading="saving" @click="$emit('clearAiKey')">清除 API Key</el-button>
+        </section>
       </section>
 
-      <section class="settings-row compact">
-        <span>Qwen 配置</span>
-        <el-tag :type="settings?.aiConfigured ? 'success' : 'info'">
-          {{ settings?.aiConfigured ? '已配置' : '未配置' }}
-        </el-tag>
-      </section>
-      <section class="settings-row compact">
-        <span>当前模型</span>
-        <code>{{ settings?.model || 'qwen-plus' }}</code>
-      </section>
-      <section class="settings-row compact">
-        <span>AI 待处理</span>
-        <strong>{{ settings?.pendingAiCount || 0 }}</strong>
-      </section>
-      <section class="settings-row compact">
-        <span>AI 失败</span>
-        <strong>{{ settings?.failedAiCount || 0 }}</strong>
-      </section>
       <section class="settings-actions">
-        <el-button :loading="testingAi" @click="$emit('testAi')">测试 Qwen 连接</el-button>
-        <el-button type="primary" :loading="organizingPending" @click="$emit('organizePending')">整理待处理内容</el-button>
+        <el-button type="primary" plain :loading="organizingPending" @click="$emit('organizePending')">整理待处理内容</el-button>
       </section>
 
       <section class="settings-note">
@@ -87,17 +132,9 @@ function syncStatusLabel(status: SyncRunResponse['status']) {
         <p v-if="!latestSyncRun">暂无同步记录。</p>
       </section>
 
-      <el-alert
-        v-if="settings && !settings.aiConfigured"
-        title="AI 开关可以先保存；真正整理前仍需在后端环境变量中配置 QWEN_API_KEY。"
-        type="warning"
-        show-icon
-        :closable="false"
-      />
-
       <section class="settings-note">
-        <h3>插件访问令牌</h3>
-        <p>Chrome 扩展里的本地访问令牌需要和后端 `XHS_EXTENSION_TOKEN` 保持一致。令牌只用于保护本地导入接口，不会上传到小红书。</p>
+        <h3>本地访问令牌</h3>
+        <p>写入设置和 Chrome 扩展导入都会使用后端的 `XHS_EXTENSION_TOKEN` 保护。</p>
       </section>
     </div>
   </el-dialog>

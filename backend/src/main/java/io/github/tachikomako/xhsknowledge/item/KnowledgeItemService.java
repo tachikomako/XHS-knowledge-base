@@ -20,7 +20,7 @@ import java.util.Set;
 public class KnowledgeItemService {
 
     private static final Set<String> CAPTURE_LEVELS = Set.of("CARD", "DETAIL");
-    private static final Set<String> AI_STATUSES = Set.of("NOT_REQUESTED", "PENDING", "SUCCESS", "FAILED");
+    private static final Set<String> AI_STATUSES = Set.of("PENDING", "PROCESSING", "COMPLETED", "FAILED");
     private static final Set<String> CONTENT_STATUSES = Set.of("DISCOVERED", "FETCHING", "COMPLETED", "FAILED");
 
     private final KnowledgeItemMapper itemMapper;
@@ -63,6 +63,7 @@ public class KnowledgeItemService {
                 wrapper.and(nested -> nested
                         .isNull(KnowledgeItemEntity::getCategoryId)
                         .or().eq(KnowledgeItemEntity::getAiStatus, "FAILED")
+                        .or().eq(KnowledgeItemEntity::getAiStatus, "PENDING")
                         .or().lt(KnowledgeItemEntity::getAiConfidence, 0.5));
             } else {
                 wrapper.and(nested -> nested

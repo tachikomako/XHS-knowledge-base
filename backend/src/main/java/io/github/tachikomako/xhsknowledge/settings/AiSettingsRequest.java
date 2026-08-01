@@ -1,4 +1,11 @@
 package io.github.tachikomako.xhsknowledge.settings;
 
-public record AiSettingsRequest(boolean aiEnabled) {
+import jakarta.validation.constraints.NotBlank;
+
+public record AiSettingsRequest(
+        boolean aiEnabled,
+        String apiKey,
+        @NotBlank String baseUrl,
+        @NotBlank String model
+) {
 }

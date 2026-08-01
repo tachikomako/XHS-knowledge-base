@@ -45,7 +45,7 @@ public class AiOrganizationService {
     public void organizeLater(String itemId) {
         if (!settingsService.aiEnabled() || !qwenClient.configured()) return;
         try {
-            markPending(itemId);
+            markProcessing(itemId);
             organizeNow(itemId);
         } catch (Exception exception) {
             markFailed(itemId, exception);
@@ -57,7 +57,7 @@ public class AiOrganizationService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "AI_NOT_CONFIGURED", "Qwen API key is not configured");
         }
         try {
-            markPending(itemId);
+            markProcessing(itemId);
             organizeNow(itemId);
         } catch (ApiException exception) {
             throw exception;
@@ -110,7 +110,7 @@ public class AiOrganizationService {
         item.setSummary(limit(result.summary(), 500));
         item.setCategoryId(categoryId);
         item.setAiConfidence(Math.max(0, Math.min(1, result.confidence())));
-        item.setAiStatus("SUCCESS");
+        item.setAiStatus("COMPLETED");
         item.setAiLastError(null);
         item.setUpdatedAt(timestamp);
         itemMapper.updateById(item);
@@ -118,10 +118,10 @@ public class AiOrganizationService {
         saveSuggestions(itemId, result.suggestedTags(), timestamp);
     }
 
-    private void markPending(String itemId) {
+    private void markProcessing(String itemId) {
         jdbcTemplate.update("""
                 UPDATE knowledge_items
-                SET ai_status = 'PENDING', ai_last_error = NULL, updated_at = ?
+                SET ai_status = 'PROCESSING', ai_last_error = NULL, updated_at = ?
                 WHERE id = ? AND manual_metadata_locked = 0
                 """, now(), itemId);
     }
@@ -141,7 +141,7 @@ public class AiOrganizationService {
                 WHERE lifecycle_status = 'ACTIVE'
                   AND content_status = 'COMPLETED'
                   AND manual_metadata_locked = 0
-                  AND ai_status IN ('NOT_REQUESTED', 'PENDING', 'FAILED')
+                  AND ai_status IN ('PENDING', 'PROCESSING', 'FAILED')
                 ORDER BY updated_at DESC
                 LIMIT 50
                 """, String.class);

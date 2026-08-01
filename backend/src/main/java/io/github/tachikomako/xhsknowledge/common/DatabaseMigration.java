@@ -29,6 +29,8 @@ public class DatabaseMigration implements ApplicationRunner {
                     FOREIGN KEY (item_id) REFERENCES knowledge_items(id) ON DELETE CASCADE
                 )
                 """);
+        jdbcTemplate.update("UPDATE knowledge_items SET ai_status = 'PENDING' WHERE ai_status = 'NOT_REQUESTED'");
+        jdbcTemplate.update("UPDATE knowledge_items SET ai_status = 'COMPLETED' WHERE ai_status = 'SUCCESS'");
     }
 
     private void addColumnIfMissing(String table, String column, String definition) {

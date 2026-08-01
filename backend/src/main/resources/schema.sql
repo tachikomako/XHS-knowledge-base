@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS knowledge_items (
     summary TEXT,
     user_note TEXT,
     category_id TEXT,
-    ai_status TEXT NOT NULL DEFAULT 'NOT_REQUESTED',
+    ai_status TEXT NOT NULL DEFAULT 'PENDING',
     ai_confidence REAL,
     ai_last_error TEXT,
     lifecycle_status TEXT NOT NULL DEFAULT 'ACTIVE',

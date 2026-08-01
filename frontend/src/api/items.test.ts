@@ -61,7 +61,7 @@ describe('knowledge item API', () => {
 
   it('sends manual AI organization requests', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'item/1', aiStatus: 'SUCCESS' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'item/1', aiStatus: 'COMPLETED' }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ processed: 1, succeeded: 1, failed: 0, skipped: 0 }) })
     vi.stubGlobal('fetch', fetchMock)
 

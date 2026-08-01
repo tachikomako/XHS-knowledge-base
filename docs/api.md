@@ -60,17 +60,20 @@ Statuses: `RUNNING`, `COMPLETED`, `PARTIAL_FAILED`, `FAILED`.
 
 ## Settings
 
-- `GET /settings`: returns `{ "aiEnabled": true, "aiConfigured": true, "model": "qwen-plus", "pendingAiCount": 0, "failedAiCount": 0 }`.
-- `PATCH /settings/ai`: updates the local AI switch. Body: `{ "aiEnabled": true }`.
-- `POST /settings/ai/test`: tests the configured Qwen endpoint and returns `{ "success": true, "configured": true, "model": "qwen-plus", "message": "Qwen connection succeeded" }`. The response never includes the API key or raw provider payload.
+- `GET /settings`: returns `{ "aiEnabled": true, "aiConfigured": true, "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "pendingAiCount": 0, "failedAiCount": 0 }`. It never returns the API key.
+- `PATCH /settings/ai`: updates local AI settings. Body: `{ "aiEnabled": true, "apiKey": "sk-xxxx", "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus" }`. Empty `apiKey` keeps any saved key unchanged. Base URL and model are required.
+- `POST /settings/ai/test`: tests the configured Qwen endpoint and returns `{ "success": true, "configured": true, "model": "qwen-plus", "message": "连接成功" }`. The response never includes the API key or raw provider payload.
+- `DELETE /settings/ai/credentials`: clears the locally saved API key while keeping the AI switch, Base URL, and model.
 
-`aiConfigured` only means `QWEN_API_KEY` is present on the backend. The API key is never returned by the API, stored in SQLite, or sent to the browser.
+Qwen Base URL/model are saved in SQLite settings. The API key is saved only in `backend/data/secrets/ai.properties`. Saved web settings take priority over environment variables; environment variables remain a compatibility fallback when no web credential has been saved or cleared. The API key is never returned by the API, stored in SQLite, sent to the browser by a query endpoint, or written to the Chrome extension.
 
 ## AI organization
 
-Qwen is configured with backend environment variables: `QWEN_API_KEY`, `QWEN_BASE_URL`, and `QWEN_MODEL`.
+Qwen can be configured from the settings dialog. Backend environment variables `QWEN_API_KEY`, `QWEN_BASE_URL`, and `QWEN_MODEL` are kept as fallback compatibility settings.
 
-- `POST /ai/organize-pending`: user-triggered batch organization for up to 50 active items whose content is `COMPLETED`, metadata is not manually locked, and AI status is `NOT_REQUESTED`, `PENDING`, or `FAILED`. Returns `{ "processed": 0, "succeeded": 0, "failed": 0, "skipped": 0, "message": null }`.
+- `POST /ai/organize-pending`: user-triggered batch organization for up to 50 active items whose content is `COMPLETED`, metadata is not manually locked, and AI status is `PENDING`, `PROCESSING`, or `FAILED`. Returns `{ "processed": 0, "succeeded": 0, "failed": 0, "skipped": 0, "message": null }`.
+
+AI status values are `PENDING`, `PROCESSING`, `COMPLETED`, and `FAILED`. Startup migration maps older `NOT_REQUESTED` rows to `PENDING` and older `SUCCESS` rows to `COMPLETED`.
 
 Automatic AI organization only happens after a user-triggered import/manual sync has committed content. There are no timer-based scheduled AI jobs.
 
