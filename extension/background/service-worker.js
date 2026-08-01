@@ -1,4 +1,10 @@
 import { createImportSummary, mergeImportResult, splitImportBatches } from './batch-core.js'
+import {
+  buildContentCandidates,
+  hasCompletableContentResults,
+  splitContentBatches,
+  summarizeContentFailure,
+} from './sync-core.js'
 import { collectAccessContextsFromPageState } from '../content/access-context.js'
 
 const DEFAULT_SETTINGS = Object.freeze({
@@ -31,7 +37,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     .then(sendResponse)
     .catch((error) => sendResponse({
       ok: false,
-      error: error instanceof Error ? error.message : '无法连接后端',
+      error: summarizeContentFailure(error),
     }))
 
   return true
@@ -58,16 +64,16 @@ async function importItems(payload) {
   const items = Array.isArray(payload?.items) ? payload.items : payload?.item ? [payload.item] : []
   const captureMode = payload?.captureMode || (items.length === 1 ? 'CURRENT_POST' : 'FAVORITES_PAGE')
   if (!payload?.extractorVersion) {
-    throw new Error('剪藏数据不完整，请刷新帖子页面后重试')
+    throw new Error('采集数据不完整，请刷新页面后重试')
   }
   let batches
   try {
     batches = splitImportBatches(items)
   } catch {
-    throw new Error('剪藏数据必须包含 1 到 500 条内容')
+    throw new Error('采集数据必须包含 1 到 500 条内容')
   }
   if (!['CURRENT_POST', 'FAVORITES_PAGE'].includes(captureMode)) {
-    throw new Error('不支持的剪藏模式')
+    throw new Error('不支持的采集模式')
   }
 
   const settings = await chrome.storage.local.get(Object.keys(DEFAULT_SETTINGS))
@@ -124,25 +130,50 @@ async function startManualSync(payload) {
       await navigateAndWait(tab.id, targetUrl)
       const discovery = await sendTabMessage(tab.id, { type: 'DISCOVER_XHS_LIST', source })
       if (!discovery?.ok) throw new Error(discovery?.error || '列表发现失败')
+
       const items = (discovery.items || []).map((item) => ({ ...item, sourceRelation: source }))
       discoveredCount += items.length
       if (items.length === 0) {
-        errors.push(sourceLabel(source) + '没有发现可同步帖子')
+        errors.push(`${sourceLabel(source)}没有发现可同步笔记`)
         continue
       }
+
       const imported = await importItems({
         captureMode: 'FAVORITES_PAGE',
         extractorVersion: discovery.extractorVersion,
         items,
       })
       mergeImportResult(summary, imported.result)
-      const completion = await completeMissingContent(tab.id, items, imported.result, discovery.extractorVersion)
+
+      const completedBeforeSource = contentCompleted
+      const failedBeforeSource = contentFailed
+      const completion = await completeMissingContent(tab.id, items, imported.result, discovery.extractorVersion, {
+        onProgress: async (progress) => {
+          try {
+            await updateSyncRun(backendUrl, extensionToken, syncRun.id, {
+              status: 'RUNNING',
+              discoveredCount,
+              processedCount: summary.received,
+              createdCount: summary.created,
+              updatedCount: summary.updated,
+              unchangedCount: summary.skipped,
+              contentCompletedCount: completedBeforeSource + progress.completed,
+              contentFailedCount: failedBeforeSource + progress.failed,
+              aiCompletedCount: 0,
+              aiFailedCount: 0,
+              errorSummary: [...errors, ...progress.errors].slice(0, 5).join('; ') || null,
+            })
+          } catch (error) {
+            errors.push(`${sourceLabel(source)}正文进度回写失败：${summarizeContentFailure(error)}`)
+          }
+        },
+      })
       contentCompleted += completion.completed
       contentFailed += completion.failed
       for (const error of completion.errors) errors.push(`${sourceLabel(source)}正文：${error}`)
       for (const warning of discovery.warnings || []) errors.push(`${sourceLabel(source)}：${warning}`)
     } catch (error) {
-      errors.push(`${sourceLabel(source)}：${error instanceof Error ? error.message : '同步失败'}`)
+      errors.push(`${sourceLabel(source)}：${summarizeContentFailure(error)}`)
     }
   }
 
@@ -163,52 +194,62 @@ async function startManualSync(payload) {
     contentFailedCount: contentFailed,
     aiCompletedCount: 0,
     aiFailedCount: 0,
-    errorSummary: errors.slice(0, 5).join('；') || null,
+    errorSummary: errors.slice(0, 5).join('; ') || null,
   })
   summary.contentCompleted = contentCompleted
   summary.contentFailed = contentFailed
   return { ok: status !== 'FAILED', result: summary, syncRun: updated, errors }
 }
 
-async function completeMissingContent(tabId, discoveredItems, importResult, extractorVersion) {
-  const bySourceId = new Map(discoveredItems.map((item) => [item.sourceItemId, item]))
-  const candidates = (importResult.results || [])
-    .filter((result) => result.itemId && ['DISCOVERED', 'FAILED'].includes(result.contentStatus))
-    .map((result) => bySourceId.get(result.sourceItemId))
-    .filter(Boolean)
+async function completeMissingContent(tabId, discoveredItems, importResult, extractorVersion, options = {}) {
+  const candidates = buildContentCandidates(discoveredItems, importResult)
   const errors = []
   let completed = 0
   let failed = 0
 
-  for (const item of candidates) {
-    try {
-      await navigateAndWait(tabId, item.url)
-      const detail = await sendTabMessage(tabId, { type: 'INSPECT_XHS_PAGE' })
-      if (!detail?.ok || !detail.item) throw new Error(detail?.error || '正文提取失败')
-      const detailItem = {
-        ...detail.item,
-        sourceRelation: item.sourceRelation,
-        contentStatus: detail.item.text ? 'COMPLETED' : 'FAILED',
-        contentLastError: detail.item.text ? null : '详情页未识别到正文',
+  if (candidates.length === 0 && hasCompletableContentResults(importResult)) {
+    errors.push('正文补全未启动：导入结果没有匹配到可补全条目')
+    return { completed, failed, errors }
+  }
+
+  for (const batch of splitContentBatches(candidates, 5)) {
+    for (const item of batch) {
+      try {
+        await navigateAndWait(tabId, item.url)
+        const detail = await sendTabMessage(tabId, { type: 'INSPECT_XHS_PAGE' })
+        if (!detail?.ok || !detail.item) throw new Error(detail?.error || '正文提取失败')
+        const detailItem = {
+          ...detail.item,
+          sourceRelation: item.sourceRelation,
+          contentStatus: detail.item.text ? 'COMPLETED' : 'FAILED',
+          contentLastError: detail.item.text ? null : '详情页未识别到正文',
+        }
+        await importItems({ captureMode: 'CURRENT_POST', extractorVersion: detail.extractorVersion, items: [detailItem] })
+        if (detailItem.contentStatus === 'COMPLETED') completed++
+        else failed++
+      } catch (error) {
+        failed++
+        const message = summarizeContentFailure(error)
+        errors.push(`${contentCandidateLabel(item)}：${message}`)
+        try {
+          await importItems({
+            captureMode: 'CURRENT_POST',
+            extractorVersion,
+            items: [{
+              ...item,
+              text: null,
+              contentStatus: 'FAILED',
+              contentLastError: message,
+              captureLevel: 'CARD',
+            }],
+          })
+        } catch (writeError) {
+          errors.push(`${contentCandidateLabel(item)}：失败状态回写失败：${summarizeContentFailure(writeError)}`)
+        }
       }
-      await importItems({ captureMode: 'CURRENT_POST', extractorVersion: detail.extractorVersion, items: [detailItem] })
-      if (detailItem.contentStatus === 'COMPLETED') completed++
-      else failed++
-    } catch (error) {
-      failed++
-      const message = error instanceof Error ? error.message : '正文提取失败'
-      errors.push(`${item.title || item.sourceItemId || item.url}：${message}`)
-      await importItems({
-        captureMode: 'CURRENT_POST',
-        extractorVersion,
-        items: [{
-          ...item,
-          text: null,
-          contentStatus: 'FAILED',
-          contentLastError: message,
-          captureLevel: 'CARD',
-        }],
-      }).catch(() => null)
+    }
+    if (typeof options.onProgress === 'function') {
+      await options.onProgress({ completed, failed, errors: [...errors] })
     }
   }
 
@@ -329,4 +370,8 @@ function syncHeaders(extensionToken) {
 
 function sourceLabel(source) {
   return source === 'LIKED' ? '点赞' : '收藏'
+}
+
+function contentCandidateLabel(item) {
+  return item?.title || item?.sourceItemId || 'unknown item'
 }
