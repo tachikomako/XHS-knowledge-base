@@ -1,5 +1,6 @@
 import { withTimeout } from './popup-core.js'
 
+const EXTENSION_BUILD = 'ae649ff'
 const DEFAULT_SETTINGS = Object.freeze({
   backendUrl: 'http://127.0.0.1:8080',
   knowledgeBaseUrl: 'http://127.0.0.1:5173',
@@ -27,9 +28,11 @@ const rescanButton = document.querySelector('#rescanButton')
 const diagnosticPanel = document.querySelector('#diagnosticPanel')
 const diagnosticText = document.querySelector('#diagnosticText')
 const copyDiagnostics = document.querySelector('#copyDiagnostics')
+const extensionBuild = document.querySelector('#extensionBuild')
 
 let currentExtraction = null
 
+extensionBuild.textContent = `Build ${EXTENSION_BUILD}`
 await loadSettings()
 await Promise.all([checkHealth(), inspectCurrentPage(), loadLatestSyncRun()])
 
@@ -58,6 +61,12 @@ captureButton.addEventListener('click', async () => {
   renderCaptureResult('', '')
 
   try {
+    if (currentExtraction.captureMode === 'FAVORITES_PAGE') {
+      const response = await performManualSync([currentExtraction.source])
+      renderManualSyncResult(response)
+      renderCaptureResult('已走 START_MANUAL_SYNC 正文补全链路', 'success')
+      return
+    }
     const response = await chrome.runtime.sendMessage({ type: 'IMPORT_XHS_ITEMS', payload: currentExtraction })
     if (!response?.ok) throw new Error(response?.error || '保存失败')
     renderImportResult(response.result)
@@ -81,11 +90,7 @@ startSyncButton.addEventListener('click', async () => {
   startSyncButton.textContent = '同步中…'
   renderSyncResult('正在遍历所选页面', '')
   try {
-    const response = await chrome.runtime.sendMessage({
-      type: 'START_MANUAL_SYNC',
-      payload: { sources, aiAfterSync: aiAfterSync.checked },
-    })
-    if (!response?.ok) throw new Error(response?.error || response?.errors?.[0] || '同步失败')
+    const response = await performManualSync(sources)
     renderManualSyncResult(response)
   } catch (error) {
     renderSyncResult(error instanceof Error ? error.message : '同步失败', 'error')
@@ -143,6 +148,7 @@ async function inspectCurrentPage() {
       currentExtraction = {
         captureMode: 'FAVORITES_PAGE',
         extractorVersion: response.extractorVersion,
+        source: 'FAVORITE',
         items: response.items,
       }
       captureTitle.textContent = `识别到 ${response.stats.candidates} 条收藏卡片`
@@ -209,6 +215,7 @@ function isMissingContentScriptError(error) {
 
 function renderDiagnostics(stats) {
   diagnosticText.value = JSON.stringify({
+    extensionBuild: EXTENSION_BUILD,
     extensionVersion: chrome.runtime.getManifest().version,
     extractorVersion: currentExtraction.extractorVersion,
     pageType: currentExtraction.captureMode,
@@ -225,6 +232,15 @@ function renderDiagnostics(stats) {
     missingTokenCount: stats.missingTokenCount,
   }, null, 2)
   diagnosticPanel.hidden = false
+}
+
+async function performManualSync(sources) {
+  const response = await chrome.runtime.sendMessage({
+    type: 'START_MANUAL_SYNC',
+    payload: { sources, aiAfterSync: aiAfterSync.checked, extensionBuild: EXTENSION_BUILD },
+  })
+  if (!response?.ok) throw new Error(response?.error || response?.errors?.[0] || '同步失败')
+  return response
 }
 
 function renderImportResult(result) {
@@ -267,7 +283,15 @@ function renderLatestSync(run) {
     latestSync.textContent = '最近同步：暂无记录'
     return
   }
-  latestSync.textContent = `最近同步：${syncStatusLabel(run.status)} · 发现 ${run.discoveredCount} · 新增 ${run.createdCount} · 更新 ${run.updatedCount} · 未变 ${run.unchangedCount} · 正文 ${run.contentCompletedCount}/${run.contentCompletedCount + run.contentFailedCount}`
+  latestSync.textContent = [
+    `最近同步：${syncStatusLabel(run.status)}`,
+    `发现 ${run.discoveredCount}`,
+    `新增 ${run.createdCount}`,
+    `更新 ${run.updatedCount}`,
+    `未变 ${run.unchangedCount}`,
+    `正文 ${run.contentCompletedCount}/${run.contentCompletedCount + run.contentFailedCount}`,
+    run.errorSummary || null,
+  ].filter(Boolean).join(' · ')
 }
 
 function syncStatusLabel(status) {

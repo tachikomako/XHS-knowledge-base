@@ -120,9 +120,23 @@ async function startManualSync(payload) {
   const syncRun = await createSyncRun(backendUrl, extensionToken, requestedSources)
   const summary = createImportSummary()
   const errors = []
+  const diagnostics = {
+    build: payload?.extensionBuild || 'unknown',
+    started: 1,
+    cardsImported: 0,
+    contentCandidates: 0,
+    detailPagesOpened: 0,
+    contentExtracted: 0,
+    detailImportsSucceeded: 0,
+    contentFailed: 0,
+  }
   let discoveredCount = 0
   let contentCompleted = 0
   let contentFailed = 0
+  await updateSyncRun(backendUrl, extensionToken, syncRun.id, {
+    status: 'RUNNING',
+    errorSummary: syncDiagnostics(diagnostics, errors),
+  })
 
   for (const source of requestedSources) {
     try {
@@ -144,12 +158,14 @@ async function startManualSync(payload) {
         items,
       })
       mergeImportResult(summary, imported.result)
+      diagnostics.cardsImported = summary.received
 
       const completedBeforeSource = contentCompleted
       const failedBeforeSource = contentFailed
       const completion = await completeMissingContent(tab.id, items, imported.result, discovery.extractorVersion, {
         onProgress: async (progress) => {
           try {
+            Object.assign(diagnostics, progress.diagnostics)
             await updateSyncRun(backendUrl, extensionToken, syncRun.id, {
               status: 'RUNNING',
               discoveredCount,
@@ -161,15 +177,17 @@ async function startManualSync(payload) {
               contentFailedCount: failedBeforeSource + progress.failed,
               aiCompletedCount: 0,
               aiFailedCount: 0,
-              errorSummary: [...errors, ...progress.errors].slice(0, 5).join('; ') || null,
+              errorSummary: syncDiagnostics(diagnostics, [...errors, ...progress.errors]),
             })
           } catch (error) {
             errors.push(`${sourceLabel(source)}正文进度回写失败：${summarizeContentFailure(error)}`)
           }
         },
       })
+      Object.assign(diagnostics, completion.diagnostics)
       contentCompleted += completion.completed
       contentFailed += completion.failed
+      diagnostics.contentFailed = contentFailed
       for (const error of completion.errors) errors.push(`${sourceLabel(source)}正文：${error}`)
       for (const warning of discovery.warnings || []) errors.push(`${sourceLabel(source)}：${warning}`)
     } catch (error) {
@@ -194,7 +212,7 @@ async function startManualSync(payload) {
     contentFailedCount: contentFailed,
     aiCompletedCount: 0,
     aiFailedCount: 0,
-    errorSummary: errors.slice(0, 5).join('; ') || null,
+    errorSummary: syncDiagnostics(diagnostics, errors),
   })
   summary.contentCompleted = contentCompleted
   summary.contentFailed = contentFailed
@@ -203,21 +221,31 @@ async function startManualSync(payload) {
 
 async function completeMissingContent(tabId, discoveredItems, importResult, extractorVersion, options = {}) {
   const candidates = buildContentCandidates(discoveredItems, importResult)
+  const diagnostics = {
+    contentCandidates: candidates.length,
+    detailPagesOpened: 0,
+    contentExtracted: 0,
+    detailImportsSucceeded: 0,
+  }
   const errors = []
   let completed = 0
   let failed = 0
 
   if (candidates.length === 0 && hasCompletableContentResults(importResult)) {
     errors.push('正文补全未启动：导入结果没有匹配到可补全条目')
-    return { completed, failed, errors }
+    return { completed, failed, errors, diagnostics }
   }
 
   for (const batch of splitContentBatches(candidates, 5)) {
     for (const item of batch) {
       try {
         await navigateAndWait(tabId, item.url)
+        diagnostics.detailPagesOpened++
         const detail = await sendTabMessage(tabId, { type: 'INSPECT_XHS_PAGE' })
-        if (!detail?.ok || !detail.item) throw new Error(detail?.error || '正文提取失败')
+        if (!detail?.ok || !detail.item) {
+          throw new Error(detail?.error || `详情页 content script 未注入或无响应: ${detail?.code || 'NO_DETAIL_ITEM'}`)
+        }
+        if (detail.item.text) diagnostics.contentExtracted++
         const detailItem = {
           ...detail.item,
           sourceRelation: item.sourceRelation,
@@ -225,8 +253,16 @@ async function completeMissingContent(tabId, discoveredItems, importResult, extr
           contentLastError: detail.item.text ? null : '详情页未识别到正文',
         }
         await importItems({ captureMode: 'CURRENT_POST', extractorVersion: detail.extractorVersion, items: [detailItem] })
-        if (detailItem.contentStatus === 'COMPLETED') completed++
-        else failed++
+        diagnostics.detailImportsSucceeded++
+        if (detailItem.contentStatus === 'COMPLETED') {
+          completed++
+        } else {
+          failed++
+          const detailDiagnostic = detail.diagnostics
+            ? `pageType=${detail.diagnostics.pageType}; noteId=${detail.diagnostics.noteId}; contentLength=${detail.diagnostics.contentLength}; errorCode=${detail.diagnostics.errorCode}`
+            : 'no detail diagnostics'
+          errors.push(`${contentCandidateLabel(item)}：详情页已打开，但正文提取结果为空 (${detailDiagnostic})`)
+        }
       } catch (error) {
         failed++
         const message = summarizeContentFailure(error)
@@ -249,11 +285,11 @@ async function completeMissingContent(tabId, discoveredItems, importResult, extr
       }
     }
     if (typeof options.onProgress === 'function') {
-      await options.onProgress({ completed, failed, errors: [...errors] })
+      await options.onProgress({ completed, failed, errors: [...errors], diagnostics: { ...diagnostics } })
     }
   }
 
-  return { completed, failed, errors }
+  return { completed, failed, errors, diagnostics }
 }
 
 async function createSyncRun(backendUrl, extensionToken, sources) {
@@ -374,4 +410,20 @@ function sourceLabel(source) {
 
 function contentCandidateLabel(item) {
   return item?.title || item?.sourceItemId || 'unknown item'
+}
+
+function syncDiagnostics(diagnostics, errors = []) {
+  const parts = [
+    `build=${diagnostics.build}`,
+    'manual sync started',
+    `cards imported: ${diagnostics.cardsImported || 0}`,
+    `content candidates: ${diagnostics.contentCandidates || 0}`,
+    `detail pages opened: ${diagnostics.detailPagesOpened || 0}`,
+    `content extracted: ${diagnostics.contentExtracted || 0}`,
+    `detail imports succeeded: ${diagnostics.detailImportsSucceeded || 0}`,
+    `content failed: ${diagnostics.contentFailed || 0}`,
+  ]
+  const lastError = errors.at(-1)
+  if (lastError) parts.push(`last error: ${summarizeContentFailure(lastError)}`)
+  return parts.join('; ').slice(0, 1000)
 }

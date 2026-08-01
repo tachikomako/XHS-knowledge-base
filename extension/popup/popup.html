@@ -13,6 +13,7 @@
         <div>
           <h1>小红书个人知识库</h1>
           <p>手动同步收藏和点赞</p>
+          <p class="build-id" id="extensionBuild">Build loading</p>
         </div>
       </header>
 
@@ -30,7 +31,7 @@
           <label class="checkbox-row"><input id="sourceFavorite" type="checkbox" checked /> 我的收藏</label>
           <label class="checkbox-row"><input id="sourceLiked" type="checkbox" /> 我的点赞</label>
         </div>
-        <p class="sync-mode">同步列表并保存可用的帖子链接；正文补全将在下一阶段处理。</p>
+        <p class="sync-mode">同步列表并打开详情页补全正文。</p>
         <label class="checkbox-row"><input id="aiAfterSync" type="checkbox" checked /> 同步后自动生成摘要、分类和标签</label>
         <button type="button" class="primary" id="startSyncButton">开始同步</button>
         <p class="capture-result" id="syncResult"></p>
