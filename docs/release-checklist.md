@@ -27,10 +27,15 @@ Use this checklist for the first installable MVP build.
 ## Real Xiaohongshu path
 
 - Clip one open post detail page.
-- Scan `tab=fav&subTab=note`.
+- Open the profile page, select favorites and/or likes in the popup, then click "start sync".
+- Confirm the extension navigates to `tab=fav&subTab=note` and `tab=liked&subTab=note` only after that click.
 - Sync the same post twice and confirm only one item exists.
+- Confirm a note appearing in both favorites and likes creates one item with two source relations.
 - Open the saved item and confirm "view original post" keeps the complete `xsec_token` URL behavior.
+- Confirm the website shows no imported visual media and makes no proxied media requests.
 - Delete a saved item and confirm it disappears from the database; sync it again and confirm it is recreated.
+- Use "清空知识库", type the exact confirmation text, and confirm items/source relations/AI suggestions are physically removed while categories, tags, settings, and latest sync history remain.
+- Reopen the popup or website settings dialog and confirm the latest sync result is visible.
 - With AI disabled, import saves raw content only.
 - With AI enabled and Qwen configured, import creates background summary/category/tag metadata.
 - If Qwen fails, confirm the item remains and `aiStatus` becomes `FAILED`.

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Calendar, Document, Picture } from '@element-plus/icons-vue'
+import { Calendar } from '@element-plus/icons-vue'
 import type { KnowledgeItem } from '../api/items'
 
 defineProps<{
@@ -19,13 +19,6 @@ function formatDate(value: string) {
 
 <template>
   <article class="knowledge-card" tabindex="0" @click="$emit('open', item)" @keyup.enter="$emit('open', item)">
-    <div class="card-cover" :class="{ empty: !item.coverUrl }">
-      <el-image v-if="item.coverUrl" :src="item.coverUrl" fit="cover" loading="lazy">
-        <template #error><el-icon><Picture /></el-icon></template>
-      </el-image>
-      <el-icon v-else><Document /></el-icon>
-      <span class="source-chip">小红书</span>
-    </div>
     <div class="card-body">
       <div class="card-meta">
         <span>{{ item.author || '未知作者' }}</span>
@@ -40,6 +33,7 @@ function formatDate(value: string) {
       </div>
       <div class="card-footer">
         <span>{{ categoryName || '未分类' }}</span>
+        <span>{{ item.sourceType === 'XIAOHONGSHU' ? '小红书' : item.sourceType }}</span>
         <span v-if="item.userNote" class="has-note">有笔记</span>
       </div>
     </div>

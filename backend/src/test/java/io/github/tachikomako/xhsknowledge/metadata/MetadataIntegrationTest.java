@@ -36,6 +36,7 @@ class MetadataIntegrationTest {
     @BeforeEach
     void cleanDatabase() {
         jdbcTemplate.update("DELETE FROM knowledge_item_tags");
+        jdbcTemplate.update("DELETE FROM item_source_relations");
         jdbcTemplate.update("DELETE FROM import_batches");
         jdbcTemplate.update("DELETE FROM knowledge_items");
         jdbcTemplate.update("DELETE FROM tags");
@@ -179,7 +180,6 @@ class MetadataIntegrationTest {
                     "title": "AI 英语学习",
                     "author": "示例作者",
                     "text": "脱敏正文",
-                    "imageUrls": [],
                     "captureLevel": "DETAIL",
                     "capturedAt": "2026-07-25T12:00:00+08:00"
                   }]

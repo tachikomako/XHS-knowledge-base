@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { deleteItem, searchItems, updateItem } from './items'
+import { clearItems, deleteItem, searchItems, updateItem } from './items'
 
 describe('knowledge item API', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -41,6 +41,20 @@ describe('knowledge item API', () => {
     }))
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/items/item%2F1', expect.objectContaining({
       method: 'DELETE',
+    }))
+  })
+
+  it('sends the typed confirmation when clearing the library', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ deletedItems: 3 }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(clearItems('清空知识库')).resolves.toEqual({ deletedItems: 3 })
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/items/clear', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ confirmation: '清空知识库' }),
     }))
   })
 

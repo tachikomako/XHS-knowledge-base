@@ -68,6 +68,7 @@ public class ImportService {
             XiaohongshuImportRequest.IncomingItem incoming = request.items().get(index);
             try {
                 ImportResponse.ItemResult result = upsert(index, incoming);
+                recordSourceRelation(result.itemId(), incoming.sourceRelation());
                 results.add(result);
                 switch (result.status()) {
                     case "CREATED" -> {
@@ -143,6 +144,7 @@ public class ImportService {
         if (!"ACTIVE".equals(existing.getLifecycleStatus())) {
             jdbcTemplate.update("DELETE FROM knowledge_item_tags WHERE item_id = ?", existing.getId());
             jdbcTemplate.update("DELETE FROM item_ai_suggestions WHERE item_id = ?", existing.getId());
+            jdbcTemplate.update("DELETE FROM item_source_relations WHERE item_id = ?", existing.getId());
             itemMapper.deleteById(existing.getId());
             KnowledgeItemEntity created = createEntity(incoming, source);
             itemMapper.insert(created);
@@ -171,7 +173,7 @@ public class ImportService {
         item.setTitle(incoming.title().trim());
         item.setContent(trimToNull(incoming.text()));
         item.setAuthor(trimToNull(incoming.author()));
-        item.setCoverUrl(normalizeMediaUrl(incoming.coverUrl()));
+        item.setCoverUrl(null);
         item.setImageUrlsJson("[]");
         item.setCaptureLevel(incoming.captureLevel());
         item.setAiStatus("NOT_REQUESTED");
@@ -206,11 +208,6 @@ public class ImportService {
         }
         changed |= setIfMoreComplete(existing.getContent(), incoming.text(), existing::setContent);
         changed |= setIfMoreComplete(existing.getAuthor(), incoming.author(), existing::setAuthor);
-        changed |= setIfMoreComplete(
-                existing.getCoverUrl(),
-                normalizeMediaUrl(incoming.coverUrl()),
-                existing::setCoverUrl
-        );
 
         if (incomingIsDetail && "CARD".equals(existing.getCaptureLevel())) {
             existing.setCaptureLevel("DETAIL");
@@ -283,6 +280,17 @@ public class ImportService {
                 .last("LIMIT 1"));
     }
 
+    private void recordSourceRelation(String itemId, String sourceRelation) {
+        String source = trimToNull(sourceRelation);
+        if (source == null) return;
+        jdbcTemplate.update(
+                "INSERT OR IGNORE INTO item_source_relations(item_id, source, created_at) VALUES (?, ?, ?)",
+                itemId,
+                source,
+                now()
+        );
+    }
+
     private ImportResponse fromPrevious(ImportBatchEntity batch) {
         return new ImportResponse(
                 batch.getId(),
@@ -303,23 +311,6 @@ public class ImportService {
 
     private String trimToNull(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
-    }
-
-    private String normalizeMediaUrl(String value) {
-        String normalized = trimToNull(value);
-        if (normalized == null) {
-            return null;
-        }
-        URI uri;
-        try {
-            uri = URI.create(normalized);
-        } catch (IllegalArgumentException exception) {
-            throw new IllegalArgumentException("Invalid media URL");
-        }
-        if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())) {
-            throw new IllegalArgumentException("Media URL must use HTTP or HTTPS");
-        }
-        return normalized;
     }
 
     private String now() {

@@ -9,8 +9,6 @@ export interface KnowledgeItem {
   title: string
   content: string | null
   author: string | null
-  coverUrl: string | null
-  imageUrls: string[]
   captureLevel: CaptureLevel
   summary: string | null
   userNote: string | null
@@ -82,6 +80,14 @@ export function updateItem(id: string, changes: UpdateKnowledgeItem): Promise<Kn
 
 export async function deleteItem(id: string): Promise<void> {
   await requestJson<void>(`/api/v1/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export function clearItems(confirmation: string): Promise<{ deletedItems: number }> {
+  return requestJson('/api/v1/items/clear', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmation }),
+  })
 }
 
 async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T> {

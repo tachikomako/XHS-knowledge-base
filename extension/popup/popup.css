@@ -57,12 +57,41 @@ header p,
   background: #eae5dc;
 }
 
+.sync-card,
 .capture-card {
   margin-top: 14px;
   padding: 16px;
   border: 1px solid #ddd6ca;
   border-radius: 14px;
   background: #fffdf8;
+}
+
+.sync-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 12px 0 8px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #4d463f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
+.sync-mode,
+.latest-sync {
+  margin: 6px 0 10px;
+  color: #777067;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .eyebrow {

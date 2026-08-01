@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -59,9 +60,18 @@ public class KnowledgeItemController {
         return itemService.update(id, request);
     }
 
+    @PostMapping("/clear")
+    public ClearItemsResponse clear(@RequestBody ClearItemsRequest request) {
+        return new ClearItemsResponse(itemService.clear(request == null ? null : request.confirmation()));
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable String id) {
         itemService.delete(id);
     }
+
+    public record ClearItemsRequest(String confirmation) {}
+
+    public record ClearItemsResponse(int deletedItems) {}
 }

@@ -9,14 +9,16 @@
 - Spring Boot 健康检查 API
 - Vue 3 + Element Plus 独立知识库：搜索、分类筛选、分页和帖子详情
 - Chrome Manifest V3 扩展，可预览并剪藏当前打开的小红书帖子
-- 收藏页已加载卡片批量预览、去重和每 50 条分批同步
+- 用户点击后一次性同步收藏和点赞列表，自动滚动发现并每 50 条分批导入
 - SQLite 本地持久化和数据库自动初始化
 - 令牌保护的小红书批量导入、幂等去重和 CARD→DETAIL 升级
+- 同步任务持久化，插件和网站设置页可查看最近一次同步结果
+- 收藏/点赞来源关系记录，同一 noteId 不重复创建知识条目
 - 条目分页查询、手工摘要/笔记和物理删除 API
 - 网站内编辑摘要和个人笔记，并可明确删除本地条目
 - 用户自定义二级分类和标签，并可跨分类按标签筛选帖子
 
-下一步：真实页面适配验证、可选 Qwen 自动整理和 AI 标签建议。
+下一步：详情页正文补全队列、正文失败重试和更完整的 AI 整理闭环。
 
 ## 技术栈
 
@@ -92,6 +94,12 @@ Release checklist: [docs/release-checklist.md](docs/release-checklist.md).
 - MVP 不调用小红书私有接口，不绕过登录、验证码或风控。
 - 收藏列表批量导入只保证卡片级信息；完整正文由当前帖子剪藏获得。
 - 内容默认仅供个人使用，不提供公开转载功能。
+
+## Phase 2.1 behavior
+
+- The knowledge-base website does not render imported visual media.
+- The extension import contract only sends note/source URL, title, author, text, source relation, capture level, tags/metadata where available, and timestamps; image URLs are not uploaded.
+- Single-item delete and "清空知识库" are physical local deletes. Clearing removes items and item-level relations/suggestions while keeping categories, tags, settings, sync runs, and import-batch history.
 
 ## License
 

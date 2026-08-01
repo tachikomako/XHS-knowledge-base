@@ -12,7 +12,7 @@
         <div class="brand-mark">知</div>
         <div>
           <h1>小红书个人知识库</h1>
-          <p>保存帖子或同步已加载收藏</p>
+          <p>手动同步收藏和点赞</p>
         </div>
       </header>
 
@@ -22,6 +22,19 @@
           <strong id="statusTitle">尚未检查连接</strong>
           <p id="statusDetail">请先启动本地后端</p>
         </div>
+      </section>
+
+      <section class="sync-card" aria-live="polite">
+        <span class="eyebrow">手动同步</span>
+        <div class="sync-options">
+          <label class="checkbox-row"><input id="sourceFavorite" type="checkbox" checked /> 我的收藏</label>
+          <label class="checkbox-row"><input id="sourceLiked" type="checkbox" /> 我的点赞</label>
+        </div>
+        <p class="sync-mode">同步列表并保存可用的帖子链接；正文补全将在下一阶段处理。</p>
+        <label class="checkbox-row"><input id="aiAfterSync" type="checkbox" checked /> 同步后自动生成摘要、分类和标签</label>
+        <button type="button" class="primary" id="startSyncButton">开始同步</button>
+        <p class="capture-result" id="syncResult"></p>
+        <p class="latest-sync" id="latestSync">最近同步：暂无记录</p>
       </section>
 
       <section class="capture-card" id="captureCard" aria-live="polite">

@@ -11,8 +11,6 @@ public record KnowledgeItemView(
         String title,
         String content,
         String author,
-        String coverUrl,
-        List<String> imageUrls,
         String captureLevel,
         String summary,
         String userNote,

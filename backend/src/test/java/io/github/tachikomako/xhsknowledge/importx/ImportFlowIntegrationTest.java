@@ -36,7 +36,9 @@ class ImportFlowIntegrationTest {
 
     @BeforeEach
     void cleanDatabase() {
+        jdbcTemplate.update("DELETE FROM item_ai_suggestions");
         jdbcTemplate.update("DELETE FROM knowledge_item_tags");
+        jdbcTemplate.update("DELETE FROM item_source_relations");
         jdbcTemplate.update("DELETE FROM import_batches");
         jdbcTemplate.update("DELETE FROM knowledge_items");
         jdbcTemplate.update("DELETE FROM tags");
@@ -163,6 +165,70 @@ class ImportFlowIntegrationTest {
     }
 
     @Test
+    void clearsLibraryPhysicallyWhileKeepingTaxonomySettingsAndSyncHistory() throws Exception {
+        String categoryId = "clear-category";
+        String tagId = "clear-tag";
+        jdbcTemplate.update(
+                "INSERT INTO categories(id, name, sort_order, created_at, updated_at) VALUES (?, ?, 0, ?, ?)",
+                categoryId, "Clear Category", "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z"
+        );
+        jdbcTemplate.update(
+                "INSERT INTO tags(id, name, normalized_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                tagId, "Clear Tag", "clear tag", "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z"
+        );
+        jdbcTemplate.update(
+                "INSERT OR REPLACE INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)",
+                "clear-test-setting", "on", "2026-08-01T00:00:00Z"
+        );
+        jdbcTemplate.update(
+                "INSERT INTO sync_runs(id, requested_sources, status, started_at) VALUES (?, ?, ?, ?)",
+                "clear-sync-run", "[\"FAVORITE\"]", "SUCCESS", "2026-08-01T00:00:00Z"
+        );
+
+        String body = mockMvc.perform(post("/api/v1/imports/xiaohongshu")
+                        .header("X-Extension-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(importJson("batch-clear-create", "DETAIL", "clear body", "https://www.xiaohongshu.com/explore/clear123?xsec_token=test-token-placeholder", "FAVORITE")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String itemId = objectMapper.readTree(body).path("results").path(0).path("itemId").asText();
+        jdbcTemplate.update("INSERT INTO knowledge_item_tags(item_id, tag_id) VALUES (?, ?)", itemId, tagId);
+        jdbcTemplate.update(
+                "INSERT INTO item_ai_suggestions(item_id, suggestion_type, value, created_at) VALUES (?, ?, ?, ?)",
+                itemId, "TAG", "Suggestion", "2026-08-01T00:00:00Z"
+        );
+
+        mockMvc.perform(post("/api/v1/items/clear")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"confirmation\":\"wrong\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_CONFIRMATION"));
+
+        mockMvc.perform(post("/api/v1/items/clear")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"confirmation\":\"清空知识库\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deletedItems").value(1));
+
+        assertThat(count("knowledge_items")).isZero();
+        assertThat(count("knowledge_item_tags")).isZero();
+        assertThat(count("item_source_relations")).isZero();
+        assertThat(count("item_ai_suggestions")).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM categories WHERE id = ?", Integer.class, categoryId)).isOne();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM tags WHERE id = ?", Integer.class, tagId)).isOne();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM app_settings WHERE key = ?", Integer.class, "clear-test-setting")).isOne();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sync_runs WHERE id = ?", Integer.class, "clear-sync-run")).isOne();
+
+        mockMvc.perform(post("/api/v1/imports/xiaohongshu")
+                        .header("X-Extension-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(importJson("batch-after-clear", "DETAIL", "reimport", "https://www.xiaohongshu.com/explore/clear123?xsec_token=test-token-placeholder")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.created").value(1))
+                .andExpect(jsonPath("$.results[0].status").value("CREATED"));
+    }
+
+    @Test
     void preservesCredentialedSourceUrlWhileDeduplicatingByNoteId() throws Exception {
         String noteId = "6a65035a000000000e035015";
         String feedUrl = "https://www.xiaohongshu.com/explore/" + noteId
@@ -205,6 +271,38 @@ class ImportFlowIntegrationTest {
                 .andExpect(jsonPath("$.total").value(1));
     }
 
+    @Test
+    void recordsFavoriteAndLikedRelationsWithoutDuplicatingItems() throws Exception {
+        String noteId = "relation123";
+        String favoriteUrl = "https://www.xiaohongshu.com/explore/" + noteId
+                + "?xsec_token=fav-token&xsec_source=pc_collect";
+        String likedUrl = "https://www.xiaohongshu.com/explore/" + noteId
+                + "?xsec_token=liked-token&xsec_source=pc_like";
+
+        mockMvc.perform(post("/api/v1/imports/xiaohongshu")
+                        .header("X-Extension-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(importJson("batch-relation-fav", "CARD", null, favoriteUrl, "FAVORITE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.created").value(1));
+
+        mockMvc.perform(post("/api/v1/imports/xiaohongshu")
+                        .header("X-Extension-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(importJson("batch-relation-liked", "CARD", null, likedUrl, "LIKED")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.updated").value(1));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM knowledge_items WHERE source_item_id = ?", Integer.class, noteId
+        )).isOne();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM item_source_relations WHERE item_id = (SELECT id FROM knowledge_items WHERE source_item_id = ?)",
+                Integer.class,
+                noteId
+        )).isEqualTo(2);
+    }
+
     private String importJson(String batchId, String captureLevel, String text) throws Exception {
         return importJson(
                 batchId,
@@ -215,6 +313,10 @@ class ImportFlowIntegrationTest {
     }
 
     private String importJson(String batchId, String captureLevel, String text, String url) throws Exception {
+        return importJson(batchId, captureLevel, text, url, null);
+    }
+
+    private String importJson(String batchId, String captureLevel, String text, String url, String sourceRelation) throws Exception {
         var root = objectMapper.createObjectNode();
         root.put("clientBatchId", batchId);
         root.put("captureMode", "DETAIL".equals(captureLevel) ? "CURRENT_POST" : "FAVORITES_PAGE");
@@ -228,10 +330,13 @@ class ImportFlowIntegrationTest {
         } else {
             item.put("text", text);
         }
-        item.put("coverUrl", "https://sns-webpic-qc.xhscdn.com/example.jpg");
-        item.putArray("imageUrls");
+        if (sourceRelation != null) item.put("sourceRelation", sourceRelation);
         item.put("captureLevel", captureLevel);
         item.put("capturedAt", "2026-07-25T12:00:00+08:00");
         return objectMapper.writeValueAsString(root);
+    }
+
+    private int count(String table) {
+        return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class);
     }
 }

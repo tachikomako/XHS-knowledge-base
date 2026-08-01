@@ -44,6 +44,7 @@ class AiOrganizationServiceTest {
     void cleanDatabase() {
         jdbcTemplate.update("DELETE FROM item_ai_suggestions");
         jdbcTemplate.update("DELETE FROM knowledge_item_tags");
+        jdbcTemplate.update("DELETE FROM item_source_relations");
         jdbcTemplate.update("DELETE FROM import_batches");
         jdbcTemplate.update("DELETE FROM knowledge_items");
         jdbcTemplate.update("DELETE FROM tags");
@@ -162,7 +163,6 @@ class AiOrganizationServiceTest {
                                     "title": "AI Agent 教程",
                                     "author": "作者",
                                     "text": "正文内容",
-                                    "imageUrls": [],
                                     "captureLevel": "DETAIL",
                                     "capturedAt": "2026-07-31T12:00:00+08:00"
                                   }]

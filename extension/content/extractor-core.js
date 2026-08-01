@@ -20,12 +20,6 @@ const TEXT_SELECTORS = [
   '.note-content .desc',
   'meta[property="og:description"]',
 ]
-const IMAGE_SELECTORS = [
-  '.note-slider img',
-  '.swiper-slide img',
-  '[data-testid="note-image"] img',
-  'meta[property="og:image"]',
-]
 const CARD_SELECTORS = [
   'section.note-item',
   '.feeds-container .note-item',
@@ -44,6 +38,22 @@ const CARD_AUTHOR_SELECTORS = [
   '.author .name',
   '[class*="author"] [class*="name"]',
 ]
+const LIST_SOURCE_CONFIG = {
+  FAVORITE: {
+    pageType: 'FAVORITE',
+    missingRootCode: 'FAVORITES_ROOT_NOT_FOUND',
+    missingRootMessage: '未能识别当前收藏区域，请重新扫描或复制匿名诊断',
+    emptyWarning: '没有识别到已加载的收藏卡片，请确认已打开“收藏”标签',
+    xsecSource: 'pc_collect',
+  },
+  LIKED: {
+    pageType: 'LIKED',
+    missingRootCode: 'LIKED_ROOT_NOT_FOUND',
+    missingRootMessage: '未能识别当前点赞区域，请重新扫描或复制匿名诊断',
+    emptyWarning: '没有识别到已加载的点赞卡片，请确认已打开“点赞”标签',
+    xsecSource: 'pc_like',
+  },
+}
 
 export class ExtractionError extends Error {
   constructor(code, message) {
@@ -72,13 +82,13 @@ export function detectPage(url, document) {
 
   const profileTab = detectProfileTab(parsed)
   if (profileTab === 'FAVORITE' || (PROFILE_PATH_PATTERN.test(parsed.pathname) && findActiveFavoritesTab(document))) {
-    const root = findFavoritesRoot(document) || (profileTab === 'FAVORITE' ? document : null)
+    const root = findProfileListRoot(document, 'FAVORITE') || (profileTab === 'FAVORITE' ? document : null)
     const postCount = root ? countPostLinks(root, url) : 0
     return { pageType: 'FAVORITE', canClip: false, canBatch: postCount > 1, postCount }
   }
   if (profileTab === 'LIKED') {
     const postCount = countPostLinks(document, url)
-    return { pageType: 'LIKED', canClip: true, canBatch: postCount > 1, postCount }
+    return { pageType: 'LIKED', canClip: false, canBatch: postCount > 0, postCount }
   }
 
   const postCount = countPostLinks(document, url)
@@ -97,16 +107,25 @@ export function detectProfileTab(value) {
 }
 
 export function extractFavoritesPage(document, pageUrl, capturedAt = new Date(), accessContexts = []) {
+  return extractProfileListPage(document, pageUrl, 'FAVORITE', capturedAt, accessContexts)
+}
+
+export function extractLikedPage(document, pageUrl, capturedAt = new Date(), accessContexts = []) {
+  return extractProfileListPage(document, pageUrl, 'LIKED', capturedAt, accessContexts)
+}
+
+function extractProfileListPage(document, pageUrl, source, capturedAt = new Date(), accessContexts = []) {
+  const config = LIST_SOURCE_CONFIG[source]
   const detection = detectPage(pageUrl, document)
-  if (detection.pageType !== 'FAVORITE') {
+  if (detection.pageType !== config.pageType) {
     throw new ExtractionError('UNSUPPORTED_PAGE', detection.reason)
   }
 
-  const root = findFavoritesRoot(document) || (detectProfileTab(pageUrl) === 'FAVORITE' ? document : null)
+  const root = findProfileListRoot(document, source) || (detectProfileTab(pageUrl) === source ? document : null)
   if (!root) {
     throw new ExtractionError(
-      'FAVORITES_ROOT_NOT_FOUND',
-      '未能识别当前收藏区域，请重新扫描或复制匿名诊断',
+      config.missingRootCode,
+      config.missingRootMessage,
     )
   }
 
@@ -126,7 +145,7 @@ export function extractFavoritesPage(document, pageUrl, capturedAt = new Date(),
 
   for (const card of candidates) {
     if (items.length >= 500) break
-    const extracted = extractCard(card, pageUrl, timestamp, accessContextByNoteId)
+    const extracted = extractCard(card, pageUrl, timestamp, accessContextByNoteId, config.xsecSource)
     if (!extracted) {
       skipped++
       continue
@@ -140,7 +159,7 @@ export function extractFavoritesPage(document, pageUrl, capturedAt = new Date(),
     }
     if (extracted.accessSource === 'PAGE_STATE') stateTokenMatchCount++
     const item = extracted.item
-    if (!isCollectSource(item.url)) {
+    if (!hasExpectedXsecSource(item.url, config.xsecSource)) {
       skipped++
       continue
     }
@@ -154,14 +173,14 @@ export function extractFavoritesPage(document, pageUrl, capturedAt = new Date(),
   }
 
   const warnings = []
-  if (items.length === 0) warnings.push('没有识别到已加载的收藏卡片，请确认已打开“收藏”标签')
+  if (items.length === 0) warnings.push(config.emptyWarning)
   if (skipped > 0) warnings.push(`${skipped} 个卡片缺少标题或帖子链接，已跳过`)
   if (missingTokenCount > 0) warnings.push(`${missingTokenCount} 个帖子缺少访问参数，已跳过且不会保存为失效链接`)
   if (duplicates > 0) warnings.push(`${duplicates} 个重复卡片已合并`)
   if (candidates.length > 500) warnings.push('当前页面卡片超过 500 条，本次只处理前 500 条')
 
   return {
-    pageType: 'FAVORITE',
+    pageType: config.pageType,
     canClip: false,
     canBatch: items.length > 1,
     extractorVersion: EXTRACTOR_VERSION,
@@ -224,7 +243,6 @@ export function extractCurrentPost(document, pageUrl, capturedAt = new Date()) {
 
   const author = limit(firstText(document, AUTHOR_SELECTORS), 200) || null
   const text = limit(firstText(document, TEXT_SELECTORS), 100_000) || null
-  const imageUrls = collectImageUrls(document, pageUrl).slice(0, 20)
 
   if (!author) warnings.push('未识别到作者')
   if (!text) warnings.push('未识别到正文，将保存为卡片')
@@ -241,8 +259,6 @@ export function extractCurrentPost(document, pageUrl, capturedAt = new Date()) {
       title,
       author,
       text,
-      coverUrl: imageUrls[0] || null,
-      imageUrls,
       captureLevel: text ? 'DETAIL' : 'CARD',
       capturedAt: capturedAt.toISOString(),
     },
@@ -267,6 +283,10 @@ function firstTextWithin(root, selectors) {
 }
 
 function findActiveFavoritesTab(document) {
+  return findActiveProfileTab(document, ['收藏'])
+}
+
+function findActiveProfileTab(document, labels) {
   const selectors = [
     '[role="tab"][aria-selected="true"]',
     '.reds-tab-item.active',
@@ -276,14 +296,17 @@ function findActiveFavoritesTab(document) {
   ]
   for (const selector of selectors) {
     const tab = [...document.querySelectorAll(selector)]
-      .find((element) => isVisible(element) && normalizeWhitespace(element.textContent).includes('收藏'))
+      .find((element) => isVisible(element)
+        && labels.some((label) => normalizeWhitespace(element.textContent).includes(label)))
     if (tab) return tab
   }
   return null
 }
 
-function findFavoritesRoot(document) {
-  const tab = findActiveFavoritesTab(document)
+function findProfileListRoot(document, source) {
+  const tab = source === 'LIKED'
+    ? findActiveProfileTab(document, ['点赞', '赞过'])
+    : findActiveFavoritesTab(document)
   if (!tab) return null
 
   const controlledId = tab.getAttribute('aria-controls')
@@ -363,7 +386,7 @@ function isPostLink(value, base) {
   return POST_PATH_PATTERN.test(safeUrl(value, base)?.pathname || '')
 }
 
-function extractCard(card, pageUrl, capturedAt, accessContextByNoteId) {
+function extractCard(card, pageUrl, capturedAt, accessContextByNoteId, defaultXsecSource = 'pc_collect') {
   const anchors = card.matches?.('a[href]')
     ? [card, ...card.querySelectorAll('a[href]')]
     : [...card.querySelectorAll('a[href]')]
@@ -387,17 +410,14 @@ function extractCard(card, pageUrl, capturedAt, accessContextByNoteId) {
     noteId,
     hrefCandidates,
     xsecToken: context?.xsecToken,
-    xsecSource: context?.xsecSource,
+    xsecSource: context?.xsecSource || defaultXsecSource,
   })
   const hadCompleteHref = hrefCandidates.some((href) => accessUrlScore(safeUrl(href, pageUrl)) === 3)
   if (!postUrl) return { status: 'SKIPPED_MISSING_ACCESS_CONTEXT', noteId, hadCompleteHref }
 
-  const image = card.querySelector('.cover img, a.cover img, img')
-  const coverUrl = normalizeMediaUrl(imageUrlFromElement(image), pageUrl)
   const title = limit(
     firstTextWithin(card, CARD_TITLE_SELECTORS)
-      || normalizeWhitespace(anchor.getAttribute('title'))
-      || normalizeWhitespace(image?.getAttribute('alt')),
+      || normalizeWhitespace(anchor.getAttribute('title')),
     500,
   )
   if (!title) return null
@@ -412,8 +432,6 @@ function extractCard(card, pageUrl, capturedAt, accessContextByNoteId) {
       title,
       author: limit(firstTextWithin(card, CARD_AUTHOR_SELECTORS), 200) || null,
       text: null,
-      coverUrl,
-      imageUrls: coverUrl ? [coverUrl] : [],
       captureLevel: 'CARD',
       capturedAt,
     },
@@ -447,33 +465,8 @@ function canonicalPostKey(value) {
   return `${parsed.hostname}${parsed.pathname}`
 }
 
-function collectImageUrls(document, pageUrl) {
-  const urls = []
-  for (const selector of IMAGE_SELECTORS) {
-    for (const element of document.querySelectorAll(selector)) {
-      if (!isVisible(element)) continue
-      const normalized = normalizeMediaUrl(imageUrlFromElement(element), pageUrl)
-      if (normalized && !urls.includes(normalized)) urls.push(normalized)
-    }
-  }
-  return urls
-}
-
-function imageUrlFromElement(element) {
-  if (!element) return null
-  if (element.tagName?.toLowerCase() === 'meta') return element.getAttribute('content')
-  return element.currentSrc
-    || element.getAttribute('data-src')
-    || element.getAttribute('src')
-    || firstSrcsetUrl(element.getAttribute('srcset'))
-}
-
-function firstSrcsetUrl(value) {
-  return String(value || '').split(',').map((part) => part.trim().split(/\s+/u)[0]).find(Boolean) || null
-}
-
-function isCollectSource(value) {
-  return safeUrl(value)?.searchParams.get('xsec_source') === 'pc_collect'
+function hasExpectedXsecSource(value, expected) {
+  return safeUrl(value)?.searchParams.get('xsec_source') === expected
 }
 
 function isVisible(element) {
@@ -487,16 +480,6 @@ function isVisible(element) {
     current = current.parentElement
   }
   return true
-}
-
-function normalizeMediaUrl(value, pageUrl) {
-  if (!value) return null
-  try {
-    const url = new URL(String(value).trim(), pageUrl)
-    return ['http:', 'https:'].includes(url.protocol) ? url.toString() : null
-  } catch {
-    return null
-  }
 }
 
 function safeUrl(value, base) {

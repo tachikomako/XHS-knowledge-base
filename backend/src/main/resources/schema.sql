@@ -61,6 +61,14 @@ CREATE TABLE IF NOT EXISTS knowledge_item_tags (
     FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS item_source_relations (
+    item_id TEXT NOT NULL,
+    source TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (item_id, source),
+    FOREIGN KEY (item_id) REFERENCES knowledge_items(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS import_batches (
     id TEXT PRIMARY KEY,
     client_batch_id TEXT NOT NULL UNIQUE,
@@ -72,6 +80,24 @@ CREATE TABLE IF NOT EXISTS import_batches (
     skipped_count INTEGER NOT NULL,
     failed_count INTEGER NOT NULL,
     created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sync_runs (
+    id TEXT PRIMARY KEY,
+    requested_sources TEXT NOT NULL,
+    status TEXT NOT NULL,
+    discovered_count INTEGER NOT NULL DEFAULT 0,
+    processed_count INTEGER NOT NULL DEFAULT 0,
+    created_count INTEGER NOT NULL DEFAULT 0,
+    updated_count INTEGER NOT NULL DEFAULT 0,
+    unchanged_count INTEGER NOT NULL DEFAULT 0,
+    content_completed_count INTEGER NOT NULL DEFAULT 0,
+    content_failed_count INTEGER NOT NULL DEFAULT 0,
+    ai_completed_count INTEGER NOT NULL DEFAULT 0,
+    ai_failed_count INTEGER NOT NULL DEFAULT 0,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    error_summary TEXT
 );
 
 CREATE TABLE IF NOT EXISTS app_settings (

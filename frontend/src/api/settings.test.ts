@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchSettings, updateAiSettings } from './settings'
+import { fetchLatestSyncRun, fetchSettings, updateAiSettings } from './settings'
 
 describe('settings API', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -7,7 +7,7 @@ describe('settings API', () => {
   it('loads settings without exposing secrets', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ aiEnabled: false, aiConfigured: true, model: 'qwen-plus' }),
+      text: async () => JSON.stringify({ aiEnabled: false, aiConfigured: true, model: 'qwen-plus' }),
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -20,7 +20,7 @@ describe('settings API', () => {
   it('updates the AI switch only', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ aiEnabled: true, aiConfigured: true, model: 'qwen-plus' }),
+      text: async () => JSON.stringify({ aiEnabled: true, aiConfigured: true, model: 'qwen-plus' }),
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -30,5 +30,15 @@ describe('settings API', () => {
       method: 'PATCH',
       body: JSON.stringify({ aiEnabled: true }),
     }))
+  })
+
+  it('loads the latest sync run and accepts an empty response', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ status: 'COMPLETED' }) })
+      .mockResolvedValueOnce({ ok: true, text: async () => '' })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fetchLatestSyncRun()).resolves.toMatchObject({ status: 'COMPLETED' })
+    await expect(fetchLatestSyncRun()).resolves.toBeNull()
   })
 })

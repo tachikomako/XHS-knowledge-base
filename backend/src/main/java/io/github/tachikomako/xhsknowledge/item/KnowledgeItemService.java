@@ -138,7 +138,21 @@ public class KnowledgeItemService {
         requireItem(id);
         jdbcTemplate.update("DELETE FROM knowledge_item_tags WHERE item_id = ?", id);
         jdbcTemplate.update("DELETE FROM item_ai_suggestions WHERE item_id = ?", id);
+        jdbcTemplate.update("DELETE FROM item_source_relations WHERE item_id = ?", id);
         itemMapper.deleteById(id);
+    }
+
+    @Transactional
+    public int clear(String confirmation) {
+        if (!"清空知识库".equals(confirmation)) {
+            throw badRequest("INVALID_CONFIRMATION", "confirmation must equal 清空知识库");
+        }
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM knowledge_items", Integer.class);
+        jdbcTemplate.update("DELETE FROM knowledge_item_tags");
+        jdbcTemplate.update("DELETE FROM item_source_relations");
+        jdbcTemplate.update("DELETE FROM item_ai_suggestions");
+        jdbcTemplate.update("DELETE FROM knowledge_items");
+        return count == null ? 0 : count;
     }
 
     private KnowledgeItemEntity requireItem(String id) {
@@ -207,8 +221,6 @@ public class KnowledgeItemService {
                 item.getTitle(),
                 item.getContent(),
                 item.getAuthor(),
-                item.getCoverUrl(),
-                List.of(),
                 item.getCaptureLevel(),
                 item.getSummary(),
                 item.getUserNote(),

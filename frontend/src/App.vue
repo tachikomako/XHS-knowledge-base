@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Collection, Connection, Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { deleteItem, getItem, searchItems, updateItem } from './api/items'
+import { clearItems, deleteItem, getItem, searchItems, updateItem } from './api/items'
 import type { KnowledgeItem } from './api/items'
 import {
   createCategory,
@@ -16,8 +16,8 @@ import {
   updateTag,
 } from './api/metadata'
 import type { Category, CategoryInput, Tag } from './api/metadata'
-import { fetchSettings, updateAiSettings } from './api/settings'
-import type { SettingsResponse } from './api/settings'
+import { fetchLatestSyncRun, fetchSettings, updateAiSettings } from './api/settings'
+import type { SettingsResponse, SyncRunResponse } from './api/settings'
 import KnowledgeCard from './components/KnowledgeCard.vue'
 import KnowledgeDetailDrawer from './components/KnowledgeDetailDrawer.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
@@ -49,6 +49,7 @@ const settingsVisible = ref(false)
 const settingsLoading = ref(false)
 const settingsSaving = ref(false)
 const settings = ref<SettingsResponse | null>(null)
+const latestSyncRun = ref<SyncRunResponse | null>(null)
 
 let listController: AbortController | null = null
 let detailController: AbortController | null = null
@@ -151,7 +152,12 @@ async function loadSettings() {
   settingsController = controller
   settingsLoading.value = true
   try {
-    settings.value = await fetchSettings(controller.signal)
+    const [settingsResult, syncRunResult] = await Promise.all([
+      fetchSettings(controller.signal),
+      fetchLatestSyncRun(controller.signal),
+    ])
+    settings.value = settingsResult
+    latestSyncRun.value = syncRunResult
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') return
     ElMessage.error(error instanceof Error ? error.message : '无法加载设置')
@@ -378,6 +384,29 @@ async function deleteSelectedItem() {
   }
 }
 
+async function clearLibrary() {
+  try {
+    const result = await ElMessageBox.prompt('此操作会物理删除所有知识库内容，并清除内容关联、来源关联和 AI 建议。分类、标签、设置和同步记录会保留。请输入“清空知识库”继续。', '清空知识库？', {
+      confirmButtonText: '清空',
+      cancelButtonText: '取消',
+      type: 'warning',
+      inputPattern: /^清空知识库$/u,
+      inputErrorMessage: '请输入 清空知识库',
+      confirmButtonClass: 'el-button--danger',
+    })
+    const response = await clearItems(result.value)
+    drawerVisible.value = false
+    selectedItem.value = null
+    page.value = 1
+    ElMessage.success(`已清空 ${response.deletedItems} 条内容`)
+    await Promise.all([loadItems(), loadMetadata(), loadSettings()])
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(error instanceof Error ? error.message : '操作失败')
+    }
+  }
+}
+
 function replaceItem(updated: KnowledgeItem) {
   const index = items.value.findIndex((item) => item.id === updated.id)
   if (index >= 0) items.value[index] = updated
@@ -423,6 +452,7 @@ function replaceItem(updated: KnowledgeItem) {
           <el-option v-for="tag in tags" :key="tag.id" :label="`#${tag.name}`" :value="tag.id" />
         </el-select>
         <el-button size="large" :icon="Setting" @click="taxonomyVisible = true">管理</el-button>
+        <el-button size="large" type="danger" plain @click="clearLibrary">清空知识库</el-button>
       </div>
     </section>
 
@@ -506,6 +536,7 @@ function replaceItem(updated: KnowledgeItem) {
     <SettingsDialog
       v-model="settingsVisible"
       :settings="settings"
+      :latest-sync-run="latestSyncRun"
       :loading="settingsLoading"
       :saving="settingsSaving"
       @reload="loadSettings"
