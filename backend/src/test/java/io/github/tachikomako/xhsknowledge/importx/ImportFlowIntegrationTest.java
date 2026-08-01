@@ -37,6 +37,7 @@ class ImportFlowIntegrationTest {
     @BeforeEach
     void cleanDatabase() {
         jdbcTemplate.update("DELETE FROM knowledge_item_tags");
+        jdbcTemplate.update("DELETE FROM item_source_relations");
         jdbcTemplate.update("DELETE FROM import_batches");
         jdbcTemplate.update("DELETE FROM knowledge_items");
         jdbcTemplate.update("DELETE FROM tags");
@@ -205,6 +206,38 @@ class ImportFlowIntegrationTest {
                 .andExpect(jsonPath("$.total").value(1));
     }
 
+    @Test
+    void recordsFavoriteAndLikedRelationsWithoutDuplicatingItems() throws Exception {
+        String noteId = "relation123";
+        String favoriteUrl = "https://www.xiaohongshu.com/explore/" + noteId
+                + "?xsec_token=fav-token&xsec_source=pc_collect";
+        String likedUrl = "https://www.xiaohongshu.com/explore/" + noteId
+                + "?xsec_token=liked-token&xsec_source=pc_like";
+
+        mockMvc.perform(post("/api/v1/imports/xiaohongshu")
+                        .header("X-Extension-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(importJson("batch-relation-fav", "CARD", null, favoriteUrl, "FAVORITE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.created").value(1));
+
+        mockMvc.perform(post("/api/v1/imports/xiaohongshu")
+                        .header("X-Extension-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(importJson("batch-relation-liked", "CARD", null, likedUrl, "LIKED")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.updated").value(1));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM knowledge_items WHERE source_item_id = ?", Integer.class, noteId
+        )).isOne();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM item_source_relations WHERE item_id = (SELECT id FROM knowledge_items WHERE source_item_id = ?)",
+                Integer.class,
+                noteId
+        )).isEqualTo(2);
+    }
+
     private String importJson(String batchId, String captureLevel, String text) throws Exception {
         return importJson(
                 batchId,
@@ -215,6 +248,10 @@ class ImportFlowIntegrationTest {
     }
 
     private String importJson(String batchId, String captureLevel, String text, String url) throws Exception {
+        return importJson(batchId, captureLevel, text, url, null);
+    }
+
+    private String importJson(String batchId, String captureLevel, String text, String url, String sourceRelation) throws Exception {
         var root = objectMapper.createObjectNode();
         root.put("clientBatchId", batchId);
         root.put("captureMode", "DETAIL".equals(captureLevel) ? "CURRENT_POST" : "FAVORITES_PAGE");
@@ -230,6 +267,7 @@ class ImportFlowIntegrationTest {
         }
         item.put("coverUrl", "https://sns-webpic-qc.xhscdn.com/example.jpg");
         item.putArray("imageUrls");
+        if (sourceRelation != null) item.put("sourceRelation", sourceRelation);
         item.put("captureLevel", captureLevel);
         item.put("capturedAt", "2026-07-25T12:00:00+08:00");
         return objectMapper.writeValueAsString(root);

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import type { SettingsResponse } from '../api/settings'
+import type { SettingsResponse, SyncRunResponse } from '../api/settings'
 
 defineProps<{
   modelValue: boolean
   settings: SettingsResponse | null
+  latestSyncRun: SyncRunResponse | null
   loading: boolean
   saving: boolean
 }>()
@@ -12,6 +13,15 @@ const emit = defineEmits<{
   toggleAi: [enabled: boolean]
   reload: []
 }>()
+
+function syncStatusLabel(status: SyncRunResponse['status']) {
+  return {
+    RUNNING: '进行中',
+    COMPLETED: '已完成',
+    PARTIAL_FAILED: '部分失败',
+    FAILED: '失败',
+  }[status]
+}
 </script>
 
 <template>
@@ -45,6 +55,20 @@ const emit = defineEmits<{
       <section class="settings-row compact">
         <span>当前模型</span>
         <code>{{ settings?.model || 'qwen-plus' }}</code>
+      </section>
+
+      <section class="settings-note">
+        <h3>最近同步</h3>
+        <p v-if="latestSyncRun">
+          {{ syncStatusLabel(latestSyncRun.status) }} ·
+          发现 {{ latestSyncRun.discoveredCount }} ·
+          处理 {{ latestSyncRun.processedCount }} ·
+          新增 {{ latestSyncRun.createdCount }} ·
+          更新 {{ latestSyncRun.updatedCount }} ·
+          未变 {{ latestSyncRun.unchangedCount }}
+        </p>
+        <p v-if="latestSyncRun?.errorSummary">{{ latestSyncRun.errorSummary }}</p>
+        <p v-if="!latestSyncRun">暂无同步记录。</p>
       </section>
 
       <el-alert

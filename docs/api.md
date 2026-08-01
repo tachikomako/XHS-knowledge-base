@@ -23,6 +23,7 @@ Base path: `/api/v1`. JSON uses UTF-8. Import requests require `X-Extension-Toke
       "author": "Example author",
       "text": "Visible post text",
       "coverUrl": "https://example.invalid/cover.jpg",
+      "sourceRelation": "FAVORITE",
       "captureLevel": "DETAIL",
       "capturedAt": "2026-07-25T12:00:00+08:00"
     }
@@ -33,6 +34,16 @@ Base path: `/api/v1`. JSON uses UTF-8. Import requests require `X-Extension-Toke
 The server limits each batch to 50 items. Reusing `clientBatchId` replays the stored summary instead of importing again. Items are deduplicated by source ID and then canonical URL. `coverUrl` is optional and non-critical; image lists are ignored.
 
 When AI is enabled and Qwen is configured, successfully created or updated items are saved first, then organized in a background task. AI failure never rolls back the import.
+
+`sourceRelation` is optional and records whether a note came from favorites, likes, or both without duplicating the knowledge item.
+
+## Manual sync runs
+
+- `POST /sync-runs`: create a user-triggered sync task. Body: `{ "requestedSources": ["FAVORITE", "LIKED"] }`. Requires `X-Extension-Token`.
+- `PATCH /sync-runs/{id}`: update task counters and final status. Requires `X-Extension-Token`.
+- `GET /sync-runs/latest`: latest task result for the extension popup and website settings dialog.
+
+Statuses: `RUNNING`, `COMPLETED`, `PARTIAL_FAILED`, `FAILED`.
 
 ## Items
 

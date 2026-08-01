@@ -35,7 +35,9 @@ public class ExtensionTokenFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/api/v1/imports/");
+        String uri = request.getRequestURI();
+        return !uri.startsWith("/api/v1/imports/")
+                && !(uri.startsWith("/api/v1/sync-runs") && !"GET".equalsIgnoreCase(request.getMethod()));
     }
 
     @Override

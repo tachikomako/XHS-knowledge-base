@@ -11,6 +11,7 @@ import {
   ExtractionError,
   extractCurrentPost,
   extractFavoritesPage,
+  extractLikedPage,
 } from '../content/extractor-core.js'
 
 const fixtureRoot = new URL('./fixtures/', import.meta.url)
@@ -108,8 +109,24 @@ test('recognizes liked profile pages without enabling sync', () => {
   `).document
   assert.deepEqual(
     detectPage('https://www.xiaohongshu.com/user/profile/fixture?tab=liked&subTab=note', document),
-    { pageType: 'LIKED', canClip: true, canBatch: false, postCount: 1 },
+    { pageType: 'LIKED', canClip: false, canBatch: true, postCount: 1 },
   )
+})
+
+test('extracts liked cards without mixing favorite or profile links', () => {
+  const document = parseHTML(`
+    <html><body><main>
+      <a href="/explore/profile-001?xsec_token=posted&amp;xsec_source=pc_profile" title="我发布的帖子"></a>
+      <a href="/explore/favorite-001?xsec_token=favorite&amp;xsec_source=pc_collect" title="收藏的帖子"></a>
+      <a href="/explore/liked-001?xsec_token=liked&amp;xsec_source=pc_like" title="点赞的帖子"></a>
+    </main></body></html>
+  `).document
+  const result = extractLikedPage(
+    document,
+    'https://www.xiaohongshu.com/user/profile/fixture?tab=liked&subTab=note',
+  )
+
+  assert.deepEqual(result.items.map((item) => item.sourceItemId), ['liked-001'])
 })
 
 test('extracts URL-confirmed favorites without a fixed container', () => {

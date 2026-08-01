@@ -19,6 +19,7 @@ flowchart LR
 - The backend owns validation, URL normalization, idempotency, physical deletion, and persistence.
 - The website is the main management UI. The extension popup stays focused on capture and connection status.
 - Local deletion is independent from Xiaohongshu. Deleting an item locally does not remove the platform favorite; the next manual sync may recreate it.
+- Manual sync runs are created only from the extension button. The run may navigate and scroll favorites/likes once, then it stops.
 
 ## Capture levels
 
@@ -29,6 +30,8 @@ flowchart LR
 
 The persisted model uses `sourceType`, `sourceItemId`, and `canonicalUrl`. Only `XIAOHONGSHU` is implemented now. Future platforms should add an extractor and URL normalizer without changing item lifecycle, search, categories, or tags.
 
+Favorites and likes are stored as item source relations, so the same Xiaohongshu `noteId` can be both favorited and liked without creating duplicate knowledge items.
+
 ## Current milestones
 
 - M0: backend health API, Vue shell, Manifest V3 connection popup.
@@ -38,4 +41,5 @@ The persisted model uses `sourceType`, `sourceItemId`, and `canonicalUrl`. Only 
 - M4: user-managed two-level categories, cross-category tags, item assignment, and taxonomy filters.
 - M5: user-confirmed favorites-page card indexing, client deduplication, and 50-item import batches.
 - M5.1: link-based card-boundary fallback, in-popup rescanning, and content-free selector diagnostics.
-- Next: one logged-in manual selector validation followed by optional AI metadata suggestions.
+- M6: user-triggered sync runs, favorites/likes source adapters, bounded auto-scroll discovery, and latest sync result display.
+- Next: detail-page content completion queue and retryable content status.

@@ -68,6 +68,7 @@ public class ImportService {
             XiaohongshuImportRequest.IncomingItem incoming = request.items().get(index);
             try {
                 ImportResponse.ItemResult result = upsert(index, incoming);
+                recordSourceRelation(result.itemId(), incoming.sourceRelation());
                 results.add(result);
                 switch (result.status()) {
                     case "CREATED" -> {
@@ -143,6 +144,7 @@ public class ImportService {
         if (!"ACTIVE".equals(existing.getLifecycleStatus())) {
             jdbcTemplate.update("DELETE FROM knowledge_item_tags WHERE item_id = ?", existing.getId());
             jdbcTemplate.update("DELETE FROM item_ai_suggestions WHERE item_id = ?", existing.getId());
+            jdbcTemplate.update("DELETE FROM item_source_relations WHERE item_id = ?", existing.getId());
             itemMapper.deleteById(existing.getId());
             KnowledgeItemEntity created = createEntity(incoming, source);
             itemMapper.insert(created);
@@ -281,6 +283,17 @@ public class ImportService {
         return batchMapper.selectOne(new LambdaQueryWrapper<ImportBatchEntity>()
                 .eq(ImportBatchEntity::getClientBatchId, clientBatchId)
                 .last("LIMIT 1"));
+    }
+
+    private void recordSourceRelation(String itemId, String sourceRelation) {
+        String source = trimToNull(sourceRelation);
+        if (source == null) return;
+        jdbcTemplate.update(
+                "INSERT OR IGNORE INTO item_source_relations(item_id, source, created_at) VALUES (?, ?, ?)",
+                itemId,
+                source,
+                now()
+        );
     }
 
     private ImportResponse fromPrevious(ImportBatchEntity batch) {

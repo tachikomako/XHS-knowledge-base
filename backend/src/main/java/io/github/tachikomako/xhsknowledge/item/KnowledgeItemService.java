@@ -138,6 +138,7 @@ public class KnowledgeItemService {
         requireItem(id);
         jdbcTemplate.update("DELETE FROM knowledge_item_tags WHERE item_id = ?", id);
         jdbcTemplate.update("DELETE FROM item_ai_suggestions WHERE item_id = ?", id);
+        jdbcTemplate.update("DELETE FROM item_source_relations WHERE item_id = ?", id);
         itemMapper.deleteById(id);
     }
 

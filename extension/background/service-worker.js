@@ -17,9 +17,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     ? checkHealth()
     : message?.type === 'IMPORT_XHS_ITEMS'
       ? importItems(message.payload)
-      : message?.type === 'READ_XHS_ACCESS_CONTEXT'
-        ? readAccessContexts(sender)
-      : null
+      : message?.type === 'START_MANUAL_SYNC'
+        ? startManualSync(message.payload)
+        : message?.type === 'GET_LATEST_SYNC_RUN'
+          ? latestSyncRun()
+          : message?.type === 'READ_XHS_ACCESS_CONTEXT'
+            ? readAccessContexts(sender)
+            : null
 
   if (!operation) return false
 
@@ -77,6 +81,7 @@ async function importItems(payload) {
   for (const chunk of batches) {
     const batch = await requestJson(`${backendUrl}/api/v1/imports/xiaohongshu`, {
       method: 'POST',
+      timeoutMs: 30000,
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
@@ -94,20 +99,108 @@ async function importItems(payload) {
   return { ok: true, result }
 }
 
+async function startManualSync(payload) {
+  const requestedSources = normalizeSources(payload?.sources)
+  if (requestedSources.length === 0) throw new Error('请至少选择收藏或点赞')
+
+  const settings = await chrome.storage.local.get(Object.keys(DEFAULT_SETTINGS))
+  const backendUrl = normalizeBaseUrl(settings.backendUrl || DEFAULT_SETTINGS.backendUrl)
+  const extensionToken = String(settings.extensionToken || '').trim()
+  if (!extensionToken) throw new Error('请先在设置中填写与后端一致的本地访问令牌')
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  if (!tab?.id || !tab.url) throw new Error('无法读取当前标签页')
+
+  const syncRun = await createSyncRun(backendUrl, extensionToken, requestedSources)
+  const summary = createImportSummary()
+  const errors = []
+  let discoveredCount = 0
+
+  for (const source of requestedSources) {
+    try {
+      const targetUrl = profileTabUrl(tab.url, source)
+      await navigateAndWait(tab.id, targetUrl)
+      const discovery = await sendTabMessage(tab.id, { type: 'DISCOVER_XHS_LIST', source })
+      if (!discovery?.ok) throw new Error(discovery?.error || '列表发现失败')
+      const items = (discovery.items || []).map((item) => ({ ...item, sourceRelation: source }))
+      discoveredCount += items.length
+      if (items.length === 0) {
+        errors.push(sourceLabel(source) + '没有发现可同步帖子')
+        continue
+      }
+      const imported = await importItems({
+        captureMode: 'FAVORITES_PAGE',
+        extractorVersion: discovery.extractorVersion,
+        items,
+      })
+      mergeImportResult(summary, imported.result)
+      for (const warning of discovery.warnings || []) errors.push(`${sourceLabel(source)}：${warning}`)
+    } catch (error) {
+      errors.push(`${sourceLabel(source)}：${error instanceof Error ? error.message : '同步失败'}`)
+    }
+  }
+
+  const failedSources = errors.filter((error) => !error.includes('重复卡片')).length
+  const status = summary.received === 0
+    ? 'FAILED'
+    : failedSources > 0 || summary.failed > 0
+      ? 'PARTIAL_FAILED'
+      : 'COMPLETED'
+  const updated = await updateSyncRun(backendUrl, extensionToken, syncRun.id, {
+    status,
+    discoveredCount,
+    processedCount: summary.received,
+    createdCount: summary.created,
+    updatedCount: summary.updated,
+    unchangedCount: summary.skipped,
+    contentCompletedCount: 0,
+    contentFailedCount: 0,
+    aiCompletedCount: 0,
+    aiFailedCount: 0,
+    errorSummary: errors.slice(0, 5).join('；') || null,
+  })
+  return { ok: status !== 'FAILED', result: summary, syncRun: updated, errors }
+}
+
+async function createSyncRun(backendUrl, extensionToken, sources) {
+  return requestJson(`${backendUrl}/api/v1/sync-runs`, {
+    method: 'POST',
+    headers: syncHeaders(extensionToken),
+    body: JSON.stringify({ requestedSources: sources }),
+  })
+}
+
+async function updateSyncRun(backendUrl, extensionToken, id, body) {
+  return requestJson(`${backendUrl}/api/v1/sync-runs/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: syncHeaders(extensionToken),
+    body: JSON.stringify(body),
+  })
+}
+
+async function latestSyncRun() {
+  const settings = await chrome.storage.local.get(Object.keys(DEFAULT_SETTINGS))
+  const backendUrl = normalizeBaseUrl(settings.backendUrl || DEFAULT_SETTINGS.backendUrl)
+  const run = await requestJson(`${backendUrl}/api/v1/sync-runs/latest`, { headers: { Accept: 'application/json' } })
+  return { ok: true, run }
+}
+
 async function requestJson(url, options = {}) {
+  const { timeoutMs = 5000, ...fetchOptions } = options
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 5000)
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
     const response = await fetch(url, {
-      ...options,
+      ...fetchOptions,
       signal: controller.signal,
     })
     if (!response.ok) {
       const errorBody = await response.json().catch(() => null)
       throw new Error(errorBody?.message || `后端返回 ${response.status}`)
     }
-    return await response.json()
+    const text = await response.text()
+    return text ? JSON.parse(text) : null
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new Error('连接超时，请确认后端已经启动')
@@ -120,4 +213,67 @@ async function requestJson(url, options = {}) {
 
 function normalizeBaseUrl(value) {
   return String(value).trim().replace(/\/+$/, '')
+}
+
+function normalizeSources(value) {
+  const sources = Array.isArray(value) ? value : []
+  return [...new Set(sources.filter((source) => ['FAVORITE', 'LIKED'].includes(source)))]
+}
+
+function profileTabUrl(currentUrl, source) {
+  const url = new URL(currentUrl)
+  if (url.hostname !== 'www.xiaohongshu.com' || !url.pathname.startsWith('/user/profile/')) {
+    throw new Error('请先打开小红书个人主页')
+  }
+  url.searchParams.set('tab', source === 'LIKED' ? 'liked' : 'fav')
+  url.searchParams.set('subTab', 'note')
+  url.hash = ''
+  return url.toString()
+}
+
+function navigateAndWait(tabId, url) {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(listener)
+      reject(new Error('页面加载超时'))
+    }, 30000)
+    const listener = (updatedTabId, changeInfo) => {
+      if (updatedTabId === tabId && changeInfo.status === 'complete') {
+        clearTimeout(timeoutId)
+        chrome.tabs.onUpdated.removeListener(listener)
+        setTimeout(resolve, 1200)
+      }
+    }
+    chrome.tabs.onUpdated.addListener(listener)
+    chrome.tabs.update(tabId, { url }).catch((error) => {
+      clearTimeout(timeoutId)
+      chrome.tabs.onUpdated.removeListener(listener)
+      reject(error)
+    })
+  })
+}
+
+async function sendTabMessage(tabId, message) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message)
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes('Receiving end does not exist')) throw error
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content/content-script.js'],
+    })
+    return chrome.tabs.sendMessage(tabId, message)
+  }
+}
+
+function syncHeaders(extensionToken) {
+  return {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    'X-Extension-Token': extensionToken,
+  }
+}
+
+function sourceLabel(source) {
+  return source === 'LIKED' ? '点赞' : '收藏'
 }

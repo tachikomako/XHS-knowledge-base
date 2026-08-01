@@ -13,6 +13,12 @@ const statusTitle = document.querySelector('#statusTitle')
 const statusDetail = document.querySelector('#statusDetail')
 const openButton = document.querySelector('#openKnowledgeBase')
 const captureButton = document.querySelector('#captureButton')
+const startSyncButton = document.querySelector('#startSyncButton')
+const sourceFavorite = document.querySelector('#sourceFavorite')
+const sourceLiked = document.querySelector('#sourceLiked')
+const aiAfterSync = document.querySelector('#aiAfterSync')
+const syncResult = document.querySelector('#syncResult')
+const latestSync = document.querySelector('#latestSync')
 const captureTitle = document.querySelector('#captureTitle')
 const captureMeta = document.querySelector('#captureMeta')
 const captureWarnings = document.querySelector('#captureWarnings')
@@ -25,7 +31,7 @@ const copyDiagnostics = document.querySelector('#copyDiagnostics')
 let currentExtraction = null
 
 await loadSettings()
-await Promise.all([checkHealth(), inspectCurrentPage()])
+await Promise.all([checkHealth(), inspectCurrentPage(), loadLatestSyncRun()])
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault()
@@ -64,6 +70,35 @@ captureButton.addEventListener('click', async () => {
   }
 })
 
+startSyncButton.addEventListener('click', async () => {
+  const sources = selectedSources()
+  if (sources.length === 0) {
+    renderSyncResult('请至少选择收藏或点赞', 'error')
+    return
+  }
+  startSyncButton.disabled = true
+  startSyncButton.setAttribute('aria-busy', 'true')
+  startSyncButton.textContent = '同步中…'
+  renderSyncResult('正在遍历所选页面', '')
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'START_MANUAL_SYNC',
+      payload: { sources, aiAfterSync: aiAfterSync.checked },
+    })
+    if (!response?.ok) throw new Error(response?.error || response?.errors?.[0] || '同步失败')
+    renderManualSyncResult(response)
+  } catch (error) {
+    renderSyncResult(error instanceof Error ? error.message : '同步失败', 'error')
+    await loadLatestSyncRun()
+  } finally {
+    startSyncButton.disabled = false
+    startSyncButton.removeAttribute('aria-busy')
+    startSyncButton.textContent = '开始同步'
+  }
+})
+
+sourceFavorite.addEventListener('change', updateSyncButton)
+sourceLiked.addEventListener('change', updateSyncButton)
 rescanButton.addEventListener('click', inspectCurrentPage)
 
 copyDiagnostics.addEventListener('click', () => {
@@ -110,7 +145,7 @@ async function inspectCurrentPage() {
         extractorVersion: response.extractorVersion,
         items: response.items,
       }
-      captureTitle.textContent = `识别到 ${response.stats.candidates} 条已加载收藏`
+      captureTitle.textContent = `识别到 ${response.stats.candidates} 条收藏卡片`
       captureMeta.textContent = response.stats.candidates
         ? `可同步 ${response.items.length} 条 · 缺少访问参数 ${response.stats.missingTokenCount} 条；向下滚动后可加载更多`
         : '请确认已进入“收藏”标签，并先向下滚动加载内容'
@@ -127,8 +162,8 @@ async function inspectCurrentPage() {
     } else if (response.pageType === 'LIKED') {
       currentExtraction = null
       captureTitle.textContent = '已识别点赞页面'
-      captureMeta.textContent = `识别到 ${response.postCount} 条已加载帖子；当前版本不提供点赞同步`
-      captureButton.textContent = '当前版本不提供点赞同步'
+      captureMeta.textContent = '可在上方选择“我的点赞”并开始同步'
+      captureButton.textContent = '使用上方手动同步'
     } else {
       throw new Error('当前页面类型暂不支持')
     }
@@ -200,6 +235,63 @@ function renderImportResult(result) {
   } else {
     renderCaptureResult(changed > 0 ? message : '这些内容已经在知识库中', 'success')
   }
+}
+
+function renderManualSyncResult(response) {
+  const run = response.syncRun
+  const result = response.result
+  const message = [
+    `发现 ${run.discoveredCount}`,
+    `处理 ${run.processedCount}`,
+    `新增 ${result.created}`,
+    `更新 ${result.updated}`,
+    `未变 ${result.skipped}`,
+    `失败 ${result.failed}`,
+  ].join(' · ')
+  renderSyncResult(message, run.status === 'COMPLETED' ? 'success' : 'error')
+  renderLatestSync(run)
+}
+
+async function loadLatestSyncRun() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_LATEST_SYNC_RUN' })
+    if (response?.ok) renderLatestSync(response.run)
+  } catch {
+    latestSync.textContent = '最近同步：暂无记录'
+  }
+}
+
+function renderLatestSync(run) {
+  if (!run) {
+    latestSync.textContent = '最近同步：暂无记录'
+    return
+  }
+  latestSync.textContent = `最近同步：${syncStatusLabel(run.status)} · 发现 ${run.discoveredCount} · 新增 ${run.createdCount} · 更新 ${run.updatedCount} · 未变 ${run.unchangedCount}`
+}
+
+function syncStatusLabel(status) {
+  return {
+    RUNNING: '进行中',
+    COMPLETED: '已完成',
+    PARTIAL_FAILED: '部分失败',
+    FAILED: '失败',
+  }[status] || status
+}
+
+function renderSyncResult(message, type) {
+  syncResult.textContent = message
+  syncResult.className = `capture-result ${type}`.trim()
+}
+
+function selectedSources() {
+  return [
+    sourceFavorite.checked ? 'FAVORITE' : null,
+    sourceLiked.checked ? 'LIKED' : null,
+  ].filter(Boolean)
+}
+
+function updateSyncButton() {
+  startSyncButton.disabled = selectedSources().length === 0
 }
 
 function captureButtonLabel() {

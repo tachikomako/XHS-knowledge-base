@@ -16,8 +16,8 @@ import {
   updateTag,
 } from './api/metadata'
 import type { Category, CategoryInput, Tag } from './api/metadata'
-import { fetchSettings, updateAiSettings } from './api/settings'
-import type { SettingsResponse } from './api/settings'
+import { fetchLatestSyncRun, fetchSettings, updateAiSettings } from './api/settings'
+import type { SettingsResponse, SyncRunResponse } from './api/settings'
 import KnowledgeCard from './components/KnowledgeCard.vue'
 import KnowledgeDetailDrawer from './components/KnowledgeDetailDrawer.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
@@ -49,6 +49,7 @@ const settingsVisible = ref(false)
 const settingsLoading = ref(false)
 const settingsSaving = ref(false)
 const settings = ref<SettingsResponse | null>(null)
+const latestSyncRun = ref<SyncRunResponse | null>(null)
 
 let listController: AbortController | null = null
 let detailController: AbortController | null = null
@@ -151,7 +152,12 @@ async function loadSettings() {
   settingsController = controller
   settingsLoading.value = true
   try {
-    settings.value = await fetchSettings(controller.signal)
+    const [settingsResult, syncRunResult] = await Promise.all([
+      fetchSettings(controller.signal),
+      fetchLatestSyncRun(controller.signal),
+    ])
+    settings.value = settingsResult
+    latestSyncRun.value = syncRunResult
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') return
     ElMessage.error(error instanceof Error ? error.message : '无法加载设置')
@@ -506,6 +512,7 @@ function replaceItem(updated: KnowledgeItem) {
     <SettingsDialog
       v-model="settingsVisible"
       :settings="settings"
+      :latest-sync-run="latestSyncRun"
       :loading="settingsLoading"
       :saving="settingsSaving"
       @reload="loadSettings"
