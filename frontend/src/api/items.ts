@@ -11,6 +11,7 @@ export interface KnowledgeItem {
   content: string | null
   contentStatus: ContentStatus
   contentLastError: string | null
+  sourceTags: string[]
   author: string | null
   captureLevel: CaptureLevel
   summary: string | null

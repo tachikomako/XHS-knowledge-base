@@ -77,4 +77,24 @@ public class QwenClient {
         String content = response.path("choices").path(0).path("message").path("content").asText();
         return objectMapper.readValue(content, QwenAiResult.class);
     }
+
+    public QwenCategorySuggestions suggestCategories(String prompt) throws Exception {
+        JsonNode response = restClient.post()
+                .uri("/chat/completions")
+                .headers(headers -> headers.setBearerAuth(apiKey))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of(
+                        "model", model,
+                        "temperature", 0.2,
+                        "response_format", Map.of("type", "json_object"),
+                        "messages", List.of(
+                                Map.of("role", "system", "content", "Return only valid JSON."),
+                                Map.of("role", "user", "content", prompt)
+                        )
+                ))
+                .retrieve()
+                .body(JsonNode.class);
+        String content = response.path("choices").path(0).path("message").path("content").asText();
+        return objectMapper.readValue(content, QwenCategorySuggestions.class);
+    }
 }

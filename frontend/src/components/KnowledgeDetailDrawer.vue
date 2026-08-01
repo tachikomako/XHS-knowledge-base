@@ -93,6 +93,9 @@ function aiStatusLabel(status: string) {
         <div class="section-heading"><h2>正文</h2><span>{{ contentStatusLabel(item.contentStatus) }}</span></div>
         <p v-if="item.contentStatus === 'FAILED' && item.contentLastError" class="status-error">{{ item.contentLastError }}</p>
         <p class="source-content">{{ item.content || '当前记录暂未采集正文。' }}</p>
+        <div v-if="item.sourceTags.length" class="source-tags detail-source-tags">
+          <span v-for="tag in item.sourceTags" :key="tag">#{{ tag }}</span>
+        </div>
         <a :href="item.originalUrl" target="_blank" rel="noopener noreferrer" class="source-link">
           <el-icon><Link /></el-icon>查看小红书原帖
         </a>

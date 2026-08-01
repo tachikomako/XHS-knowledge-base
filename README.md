@@ -104,6 +104,8 @@ Release checklist: [docs/release-checklist.md](docs/release-checklist.md).
 
 - The website settings dialog can safely test Qwen, show pending/failed AI counts, and manually organize pending content; item details can trigger single-item AI reorganization.
 - AI organization has no timer-based scheduler. It runs only after user-triggered import/sync commits content or after an explicit website button click.
+- Original Xiaohongshu hashtags are stored separately from editable tags, can be viewed on item details, and feed Qwen category suggestions that the user confirms before categories are created.
+- The category sidebar includes a pending-organization entry for uncategorized, failed-AI, or low-confidence items.
 
 ## License
 

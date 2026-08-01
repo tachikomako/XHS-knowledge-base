@@ -35,6 +35,7 @@ test('extracts a visible current post into the backend contract', async () => {
     title: '用 AI 整理英语学习资料',
     author: '示例作者',
     text: '这是一份用于自动化测试的脱敏正文。 #英语 #AI #教程',
+    sourceTags: ['英语', 'AI', '教程'],
     contentStatus: 'COMPLETED',
     contentLastError: null,
     captureLevel: 'DETAIL',

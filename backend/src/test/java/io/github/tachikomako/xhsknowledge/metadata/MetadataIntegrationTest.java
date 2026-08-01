@@ -2,6 +2,8 @@ package io.github.tachikomako.xhsknowledge.metadata;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.tachikomako.xhsknowledge.ai.QwenCategorySuggestions;
+import io.github.tachikomako.xhsknowledge.ai.QwenClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,9 +11,12 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -33,9 +38,13 @@ class MetadataIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @MockitoBean
+    private QwenClient qwenClient;
+
     @BeforeEach
     void cleanDatabase() {
         jdbcTemplate.update("DELETE FROM knowledge_item_tags");
+        jdbcTemplate.update("DELETE FROM knowledge_item_source_tags");
         jdbcTemplate.update("DELETE FROM item_source_relations");
         jdbcTemplate.update("DELETE FROM import_batches");
         jdbcTemplate.update("DELETE FROM knowledge_items");
@@ -135,6 +144,32 @@ class MetadataIntegrationTest {
         )).isEqualTo(2);
     }
 
+    @Test
+    void generatesAndConfirmsCategorySuggestionsFromSourceTags() throws Exception {
+        importItemWithTags();
+        when(qwenClient.configured()).thenReturn(true);
+        when(qwenClient.suggestCategories(anyString())).thenReturn(new QwenCategorySuggestions(
+                java.util.List.of(new CategorySuggestion("AI 与编程", "AI tools", "coding and agents", "daily life"))
+        ));
+
+        mockMvc.perform(get("/api/v1/categories/source-tags"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("AI"));
+
+        mockMvc.perform(post("/api/v1/categories/suggestions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.suggestions[0].name").value("AI 与编程"))
+                .andExpect(jsonPath("$.sourceTags[0].name").value("AI"));
+
+        mockMvc.perform(post("/api/v1/categories/suggestions/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"categories":[{"name":"AI 与编程","definition":"","scope":"","exclusions":""}]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("AI 与编程"));
+    }
+
     private String createCategory(String name, String parentId) throws Exception {
         var request = objectMapper.createObjectNode().put("name", name).put("sortOrder", 0);
         if (parentId == null) request.putNull("parentId"); else request.put("parentId", parentId);
@@ -167,6 +202,32 @@ class MetadataIntegrationTest {
 
     private String importItem() throws Exception {
         return importItem("metadata-test-batch", "metadata123");
+    }
+
+    private String importItemWithTags() throws Exception {
+        JsonNode request = objectMapper.readTree("""
+                {
+                  "clientBatchId": "metadata-source-tag-batch",
+                  "captureMode": "CURRENT_POST",
+                  "extractorVersion": "test-1",
+                  "items": [{
+                    "url": "https://www.xiaohongshu.com/explore/sourcetag123",
+                    "title": "AI 编程",
+                    "author": "作者",
+                    "text": "正文 #AI #编程",
+                    "sourceTags": ["AI", "编程"],
+                    "captureLevel": "DETAIL",
+                    "capturedAt": "2026-07-25T12:00:00+08:00"
+                  }]
+                }
+                """);
+        String body = mockMvc.perform(post("/api/v1/imports/xiaohongshu")
+                        .header("X-Extension-Token", "test-extension-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request.toString()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body).path("results").path(0).path("itemId").asText();
     }
 
     private String importItem(String batchId, String sourceId) throws Exception {

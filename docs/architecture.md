@@ -23,6 +23,7 @@ flowchart LR
 - Clearing the knowledge library is a confirmed physical delete of item rows and their item-level relations only; user taxonomy, settings, and sync history remain.
 - Manual sync runs are created only from the extension button. The run may navigate and scroll favorites/likes once, then it stops.
 - AI organization is only triggered by user actions: import/current clip/manual sync after content is saved, the single-item organize button, or the settings dialog batch organize button. The backend does not run timer-based AI jobs.
+- Original Xiaohongshu hashtags are stored in `knowledge_item_source_tags`. They are used for category suggestion statistics and are separate from the editable tag library.
 
 ## Capture levels
 
@@ -48,4 +49,5 @@ Favorites and likes are stored as item source relations, so the same Xiaohongshu
 - M5.1: link-based card-boundary fallback, in-popup rescanning, and content-free selector diagnostics.
 - M6: user-triggered sync runs, favorites/likes source adapters, bounded auto-scroll discovery, and latest sync result display.
 - M7: detail-page text completion during manual sync, safe Qwen connection testing, and manual single/batch AI organization controls.
+- M8: original hashtag statistics, Qwen category suggestions, user-confirmed category creation, and a pending-organization sidebar entry.
 - Next: richer AI review UX and retry visibility for long-running batches.

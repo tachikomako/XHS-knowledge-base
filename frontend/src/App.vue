@@ -5,17 +5,20 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { clearItems, deleteItem, getItem, organizeItem, organizePendingAi, searchItems, updateItem } from './api/items'
 import type { KnowledgeItem } from './api/items'
 import {
+  confirmCategorySuggestions,
   createCategory,
   createTag,
   deleteCategory,
   deleteTag,
   fetchCategories,
+  fetchSourceTags,
   fetchTags,
+  generateCategorySuggestions,
   mergeTag as mergeTagApi,
   updateCategory,
   updateTag,
 } from './api/metadata'
-import type { Category, CategoryInput, Tag } from './api/metadata'
+import type { Category, CategoryInput, CategorySuggestion, SourceTag, Tag } from './api/metadata'
 import { fetchLatestSyncRun, fetchSettings, testAiConnection, updateAiSettings } from './api/settings'
 import type { SettingsResponse, SyncRunResponse } from './api/settings'
 import KnowledgeCard from './components/KnowledgeCard.vue'
@@ -44,8 +47,11 @@ const detailOrganizing = ref(false)
 const selectedItem = ref<KnowledgeItem | null>(null)
 const categories = ref<Category[]>([])
 const tags = ref<Tag[]>([])
+const sourceTags = ref<SourceTag[]>([])
+const categorySuggestions = ref<CategorySuggestion[]>([])
 const taxonomyVisible = ref(false)
 const taxonomyLoading = ref(false)
+const taxonomySuggesting = ref(false)
 const settingsVisible = ref(false)
 const settingsLoading = ref(false)
 const settingsSaving = ref(false)
@@ -135,12 +141,14 @@ async function loadMetadata() {
   metadataController = controller
   taxonomyLoading.value = true
   try {
-    const [categoryResult, tagResult] = await Promise.all([
+    const [categoryResult, tagResult, sourceTagResult] = await Promise.all([
       fetchCategories(controller.signal),
       fetchTags(controller.signal),
+      fetchSourceTags(controller.signal),
     ])
     categories.value = categoryResult
     tags.value = tagResult
+    sourceTags.value = sourceTagResult
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') return
     ElMessage.error(error instanceof Error ? error.message : '无法加载分类与标签')
@@ -295,6 +303,25 @@ async function organizeSelectedItem() {
 
 async function addCategory(input: CategoryInput) {
   await mutateMetadata(() => createCategory(input), '分类已添加')
+}
+
+async function generateSuggestions() {
+  taxonomySuggesting.value = true
+  try {
+    const result = await generateCategorySuggestions()
+    categorySuggestions.value = result.suggestions
+    sourceTags.value = result.sourceTags
+    ElMessage.success(`已生成 ${result.suggestions.length} 个分类建议`)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '生成分类建议失败')
+  } finally {
+    taxonomySuggesting.value = false
+  }
+}
+
+async function confirmSuggestions(suggestions: CategorySuggestion[]) {
+  const updated = await mutateMetadata(() => confirmCategorySuggestions(suggestions), '分类建议已创建')
+  if (updated) categorySuggestions.value = []
 }
 
 async function addTag(name: string) {
@@ -514,6 +541,7 @@ function replaceItem(updated: KnowledgeItem) {
     <section class="library-body">
       <aside class="category-sidebar" aria-label="分类树">
         <button type="button" :class="{ active: !categoryId }" @click="selectCategory('')">所有</button>
+        <button type="button" :class="{ active: categoryId === '__pending__' }" @click="selectCategory('__pending__')">待整理</button>
         <div v-for="category in categoryTree" :key="category.id" class="category-branch">
           <button type="button" :class="{ active: categoryId === category.id }" @click="selectCategory(category.id)">
             <span>{{ category.name }}</span><small>{{ category.itemCount }}</small>
@@ -575,8 +603,13 @@ function replaceItem(updated: KnowledgeItem) {
       v-model="taxonomyVisible"
       :categories="orderedCategories"
       :tags="tags"
+      :source-tags="sourceTags"
+      :suggestions="categorySuggestions"
       :loading="taxonomyLoading"
+      :suggesting="taxonomySuggesting"
       @create-category="addCategory"
+      @generate-suggestions="generateSuggestions"
+      @confirm-suggestions="confirmSuggestions"
       @create-tag="addTag"
       @edit-category="editCategory"
       @edit-tag="editTag"

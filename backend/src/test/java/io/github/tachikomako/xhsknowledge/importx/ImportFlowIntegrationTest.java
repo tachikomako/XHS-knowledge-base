@@ -38,6 +38,7 @@ class ImportFlowIntegrationTest {
     void cleanDatabase() {
         jdbcTemplate.update("DELETE FROM item_ai_suggestions");
         jdbcTemplate.update("DELETE FROM knowledge_item_tags");
+        jdbcTemplate.update("DELETE FROM knowledge_item_source_tags");
         jdbcTemplate.update("DELETE FROM item_source_relations");
         jdbcTemplate.update("DELETE FROM import_batches");
         jdbcTemplate.update("DELETE FROM knowledge_items");
@@ -196,6 +197,10 @@ class ImportFlowIntegrationTest {
         String itemId = objectMapper.readTree(body).path("results").path(0).path("itemId").asText();
         jdbcTemplate.update("INSERT INTO knowledge_item_tags(item_id, tag_id) VALUES (?, ?)", itemId, tagId);
         jdbcTemplate.update(
+                "INSERT INTO knowledge_item_source_tags(item_id, value, created_at) VALUES (?, ?, ?)",
+                itemId, "AI", "2026-08-01T00:00:00Z"
+        );
+        jdbcTemplate.update(
                 "INSERT INTO item_ai_suggestions(item_id, suggestion_type, value, created_at) VALUES (?, ?, ?, ?)",
                 itemId, "TAG", "Suggestion", "2026-08-01T00:00:00Z"
         );
@@ -214,6 +219,7 @@ class ImportFlowIntegrationTest {
 
         assertThat(count("knowledge_items")).isZero();
         assertThat(count("knowledge_item_tags")).isZero();
+        assertThat(count("knowledge_item_source_tags")).isZero();
         assertThat(count("item_source_relations")).isZero();
         assertThat(count("item_ai_suggestions")).isZero();
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM categories WHERE id = ?", Integer.class, categoryId)).isOne();

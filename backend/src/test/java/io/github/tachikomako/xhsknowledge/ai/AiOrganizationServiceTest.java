@@ -46,6 +46,7 @@ class AiOrganizationServiceTest {
     void cleanDatabase() {
         jdbcTemplate.update("DELETE FROM item_ai_suggestions");
         jdbcTemplate.update("DELETE FROM knowledge_item_tags");
+        jdbcTemplate.update("DELETE FROM knowledge_item_source_tags");
         jdbcTemplate.update("DELETE FROM item_source_relations");
         jdbcTemplate.update("DELETE FROM import_batches");
         jdbcTemplate.update("DELETE FROM knowledge_items");
@@ -86,7 +87,7 @@ class AiOrganizationServiceTest {
     }
 
     @Test
-    void createsDefaultCategoriesWhenAiRunsBeforeUserCreatesCategories() throws Exception {
+    void doesNotCreateCategoriesBeforeUserConfirmsTaxonomy() throws Exception {
         String itemId = importItem();
         when(qwenClient.organize(anyString())).thenReturn(new QwenAiResult(
                 "这是一个 AI 工具教程。",
@@ -100,10 +101,10 @@ class AiOrganizationServiceTest {
 
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT category_id FROM knowledge_items WHERE id = ?", String.class, itemId
-        )).isEqualTo("default-technology");
+        )).isNull();
         assertThat(jdbcTemplate.queryForList(
                 "SELECT name FROM categories ORDER BY sort_order", String.class
-        )).containsExactly("技术", "软件工具", "英语学习", "生活", "其他");
+        )).isEmpty();
     }
 
     @Test

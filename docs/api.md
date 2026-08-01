@@ -22,6 +22,7 @@ Base path: `/api/v1`. JSON uses UTF-8. Import requests require `X-Extension-Toke
       "title": "Example title",
       "author": "Example author",
       "text": "Visible post text",
+      "sourceTags": ["AI", "效率工具"],
       "sourceRelation": "FAVORITE",
       "captureLevel": "DETAIL",
       "capturedAt": "2026-07-25T12:00:00+08:00"
@@ -37,6 +38,8 @@ When AI is enabled and Qwen is configured, successfully created or updated items
 `sourceRelation` is optional and records whether a note came from favorites, likes, or both without duplicating the knowledge item.
 
 `contentStatus` is optional on import and can be `DISCOVERED`, `COMPLETED`, or `FAILED`. List-card imports default to `DISCOVERED`; detail-page imports with text become `COMPLETED`; failures can be recorded with `contentLastError`.
+
+`sourceTags` is optional and stores original Xiaohongshu hashtags separately from the user/AI tag library. AI organization must not overwrite these source tags.
 
 ## Manual sync runs
 
@@ -84,6 +87,9 @@ If the user edits summary, category, or tags, `manualMetadataLocked` prevents la
 ## Categories and tags
 
 - `GET /categories`, `POST /categories`, `PUT /categories/{id}`, `DELETE /categories/{id}`.
+- `GET /categories/source-tags`: top original Xiaohongshu hashtag frequencies.
+- `POST /categories/suggestions`: ask Qwen for 7-10 root category suggestions from existing content and source tags. Suggestions are returned for review and are not saved automatically.
+- `POST /categories/suggestions/confirm`: create user-confirmed root categories from edited suggestions.
 - `GET /tags`, `POST /tags`, `PUT /tags/{id}`, `POST /tags/{sourceTagId}/merge`, `DELETE /tags/{id}`.
 
 Category requests use `{ "name": "技术", "parentId": null, "sortOrder": 0 }`. Only two category levels are supported. A category must have no children or assigned items before deletion.

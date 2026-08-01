@@ -21,6 +21,7 @@ public record XiaohongshuImportRequest(
             @NotBlank @Size(max = 500) String title,
             @Size(max = 200) String author,
             @Size(max = 100_000) String text,
+            @Size(max = 30) List<@Size(max = 50) String> sourceTags,
             @Pattern(regexp = "DISCOVERED|COMPLETED|FAILED") String contentStatus,
             @Size(max = 500) String contentLastError,
             @Pattern(regexp = "FAVORITE|LIKED") String sourceRelation,
