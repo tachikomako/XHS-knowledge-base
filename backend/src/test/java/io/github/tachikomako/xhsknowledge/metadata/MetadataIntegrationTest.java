@@ -180,7 +180,6 @@ class MetadataIntegrationTest {
                     "title": "AI 英语学习",
                     "author": "示例作者",
                     "text": "脱敏正文",
-                    "imageUrls": [],
                     "captureLevel": "DETAIL",
                     "capturedAt": "2026-07-25T12:00:00+08:00"
                   }]

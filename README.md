@@ -95,6 +95,12 @@ Release checklist: [docs/release-checklist.md](docs/release-checklist.md).
 - 收藏列表批量导入只保证卡片级信息；完整正文由当前帖子剪藏获得。
 - 内容默认仅供个人使用，不提供公开转载功能。
 
+## Phase 2.1 behavior
+
+- The knowledge-base website does not render imported visual media.
+- The extension import contract only sends note/source URL, title, author, text, source relation, capture level, tags/metadata where available, and timestamps; image URLs are not uploaded.
+- Single-item delete and "清空知识库" are physical local deletes. Clearing removes items and item-level relations/suggestions while keeping categories, tags, settings, sync runs, and import-batch history.
+
 ## License
 
 [MIT](LICENSE)

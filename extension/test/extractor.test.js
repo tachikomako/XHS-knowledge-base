@@ -35,12 +35,6 @@ test('extracts a visible current post into the backend contract', async () => {
     title: '用 AI 整理英语学习资料',
     author: '示例作者',
     text: '这是一份用于自动化测试的脱敏正文。 #英语 #AI #教程',
-    coverUrl: 'https://images.example.invalid/one.jpg',
-    imageUrls: [
-      'https://images.example.invalid/one.jpg',
-      'https://images.example.invalid/two.jpg',
-      'https://images.example.invalid/cover.jpg',
-    ],
     captureLevel: 'DETAIL',
     capturedAt: '2026-07-25T04:00:00.000Z',
   })
@@ -53,7 +47,6 @@ test('falls back to Open Graph metadata', async () => {
   assert.equal(result.item.title, '由元数据提供的标题')
   assert.equal(result.item.author, '元数据作者')
   assert.equal(result.item.text, '由元数据提供的正文摘要')
-  assert.equal(result.item.coverUrl, 'https://images.example.invalid/fallback.jpg')
   assert.equal(result.item.captureLevel, 'DETAIL')
 })
 
@@ -160,19 +153,18 @@ test('ignores profile posts mixed into the favorites tab DOM', () => {
   assert.deepEqual(result.items.map((item) => item.sourceItemId), ['favorite-001'])
 })
 
-test('extracts image URLs from srcset when lazy image src is empty', () => {
+test('does not include image fields in the backend contract', () => {
   const document = parseHTML(`
     <html><head><title>srcset 图片</title></head><body>
       <h1 id="detail-title">srcset 图片</h1>
       <div id="detail-desc">正文</div>
-      <div data-testid="note-image">
-        <img srcset="https://sns-img-qc.xhscdn.com/one.jpg 1x, https://sns-img-qc.xhscdn.com/two.jpg 2x">
-      </div>
+      <div data-testid="note-image"></div>
     </body></html>
   `).document
   const result = extractCurrentPost(document, 'https://www.xiaohongshu.com/explore/srcset001')
 
-  assert.equal(result.item.coverUrl, 'https://sns-img-qc.xhscdn.com/one.jpg')
+  assert.equal(Object.hasOwn(result.item, 'coverUrl'), false)
+  assert.equal(Object.hasOwn(result.item, 'imageUrls'), false)
 })
 
 test('extracts and deduplicates loaded cards from the favorites page', async () => {
@@ -269,8 +261,8 @@ test('infers card boundaries from post links when Xiaohongshu class names change
 test('uses a post link itself when the page has no card wrapper', () => {
   const document = parseHTML(`
     <html><body><button role="tab" aria-selected="true" aria-controls="favorites-panel">收藏</button><main id="favorites-panel" role="tabpanel">
-      <a href="/explore/direct-001" title="直接链接一"><img /></a>
-      <a href="/explore/direct-002" title="直接链接二"><img /></a>
+      <a href="/explore/direct-001" title="直接链接一"></a>
+      <a href="/explore/direct-002" title="直接链接二"></a>
     </main></body></html>
   `).document
   const result = extractFavoritesPage(

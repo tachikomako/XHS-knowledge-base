@@ -22,7 +22,6 @@ Base path: `/api/v1`. JSON uses UTF-8. Import requests require `X-Extension-Toke
       "title": "Example title",
       "author": "Example author",
       "text": "Visible post text",
-      "coverUrl": "https://example.invalid/cover.jpg",
       "sourceRelation": "FAVORITE",
       "captureLevel": "DETAIL",
       "capturedAt": "2026-07-25T12:00:00+08:00"
@@ -31,7 +30,7 @@ Base path: `/api/v1`. JSON uses UTF-8. Import requests require `X-Extension-Toke
 }
 ```
 
-The server limits each batch to 50 items. Reusing `clientBatchId` replays the stored summary instead of importing again. Items are deduplicated by source ID and then canonical URL. `coverUrl` is optional and non-critical; image lists are ignored.
+The server limits each batch to 50 items. Reusing `clientBatchId` replays the stored summary instead of importing again. Items are deduplicated by source ID and then canonical URL. Image URLs are not part of the import contract and are not displayed, proxied, or uploaded by the extension.
 
 When AI is enabled and Qwen is configured, successfully created or updated items are saved first, then organized in a background task. AI failure never rolls back the import.
 
@@ -51,6 +50,7 @@ Statuses: `RUNNING`, `COMPLETED`, `PARTIAL_FAILED`, `FAILED`.
 - `GET /items/{id}`: full saved item.
 - `PATCH /items/{id}`: partial edit of `categoryId`, `tagIds`, `summary`, and `userNote`. JSON `null` clears a field.
 - `DELETE /items/{id}`: physically delete the item and its tag/AI suggestion links. Categories and public tags are kept.
+- `POST /items/clear`: physically clear the knowledge library. Body: `{ "confirmation": "清空知识库" }`. Deletes `knowledge_items`, `knowledge_item_tags`, `item_source_relations`, and `item_ai_suggestions`; keeps categories, tags, app settings, sync runs, and import batches. Returns `{ "deletedItems": 0 }`.
 
 ## Settings
 

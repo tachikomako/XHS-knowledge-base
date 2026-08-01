@@ -19,6 +19,8 @@ flowchart LR
 - The backend owns validation, URL normalization, idempotency, physical deletion, and persistence.
 - The website is the main management UI. The extension popup stays focused on capture and connection status.
 - Local deletion is independent from Xiaohongshu. Deleting an item locally does not remove the platform favorite; the next manual sync may recreate it.
+- Images are intentionally outside the product surface: the extension does not upload image URLs, the backend does not depend on image data, and the website does not render covers or image strips.
+- Clearing the knowledge library is a confirmed physical delete of item rows and their item-level relations only; user taxonomy, settings, and sync history remain.
 - Manual sync runs are created only from the extension button. The run may navigate and scroll favorites/likes once, then it stops.
 
 ## Capture levels

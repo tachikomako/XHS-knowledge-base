@@ -163,7 +163,6 @@ class AiOrganizationServiceTest {
                                     "title": "AI Agent 教程",
                                     "author": "作者",
                                     "text": "正文内容",
-                                    "imageUrls": [],
                                     "captureLevel": "DETAIL",
                                     "capturedAt": "2026-07-31T12:00:00+08:00"
                                   }]

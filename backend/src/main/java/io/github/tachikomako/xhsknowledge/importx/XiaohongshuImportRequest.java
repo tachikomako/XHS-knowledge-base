@@ -21,14 +21,8 @@ public record XiaohongshuImportRequest(
             @NotBlank @Size(max = 500) String title,
             @Size(max = 200) String author,
             @Size(max = 100_000) String text,
-            @Size(max = 2048) String coverUrl,
-            @Size(max = 20) List<@Size(max = 2048) String> imageUrls,
             @Pattern(regexp = "FAVORITE|LIKED") String sourceRelation,
             @NotBlank @Pattern(regexp = "CARD|DETAIL") String captureLevel,
             OffsetDateTime capturedAt
-    ) {
-        public IncomingItem {
-            imageUrls = imageUrls == null ? List.of() : List.copyOf(imageUrls);
-        }
-    }
+    ) {}
 }

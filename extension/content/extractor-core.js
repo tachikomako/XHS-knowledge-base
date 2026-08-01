@@ -20,12 +20,6 @@ const TEXT_SELECTORS = [
   '.note-content .desc',
   'meta[property="og:description"]',
 ]
-const IMAGE_SELECTORS = [
-  '.note-slider img',
-  '.swiper-slide img',
-  '[data-testid="note-image"] img',
-  'meta[property="og:image"]',
-]
 const CARD_SELECTORS = [
   'section.note-item',
   '.feeds-container .note-item',
@@ -249,7 +243,6 @@ export function extractCurrentPost(document, pageUrl, capturedAt = new Date()) {
 
   const author = limit(firstText(document, AUTHOR_SELECTORS), 200) || null
   const text = limit(firstText(document, TEXT_SELECTORS), 100_000) || null
-  const imageUrls = collectImageUrls(document, pageUrl).slice(0, 20)
 
   if (!author) warnings.push('未识别到作者')
   if (!text) warnings.push('未识别到正文，将保存为卡片')
@@ -266,8 +259,6 @@ export function extractCurrentPost(document, pageUrl, capturedAt = new Date()) {
       title,
       author,
       text,
-      coverUrl: imageUrls[0] || null,
-      imageUrls,
       captureLevel: text ? 'DETAIL' : 'CARD',
       capturedAt: capturedAt.toISOString(),
     },
@@ -424,12 +415,9 @@ function extractCard(card, pageUrl, capturedAt, accessContextByNoteId, defaultXs
   const hadCompleteHref = hrefCandidates.some((href) => accessUrlScore(safeUrl(href, pageUrl)) === 3)
   if (!postUrl) return { status: 'SKIPPED_MISSING_ACCESS_CONTEXT', noteId, hadCompleteHref }
 
-  const image = card.querySelector('.cover img, a.cover img, img')
-  const coverUrl = normalizeMediaUrl(imageUrlFromElement(image), pageUrl)
   const title = limit(
     firstTextWithin(card, CARD_TITLE_SELECTORS)
-      || normalizeWhitespace(anchor.getAttribute('title'))
-      || normalizeWhitespace(image?.getAttribute('alt')),
+      || normalizeWhitespace(anchor.getAttribute('title')),
     500,
   )
   if (!title) return null
@@ -444,8 +432,6 @@ function extractCard(card, pageUrl, capturedAt, accessContextByNoteId, defaultXs
       title,
       author: limit(firstTextWithin(card, CARD_AUTHOR_SELECTORS), 200) || null,
       text: null,
-      coverUrl,
-      imageUrls: coverUrl ? [coverUrl] : [],
       captureLevel: 'CARD',
       capturedAt,
     },
@@ -479,31 +465,6 @@ function canonicalPostKey(value) {
   return `${parsed.hostname}${parsed.pathname}`
 }
 
-function collectImageUrls(document, pageUrl) {
-  const urls = []
-  for (const selector of IMAGE_SELECTORS) {
-    for (const element of document.querySelectorAll(selector)) {
-      if (!isVisible(element)) continue
-      const normalized = normalizeMediaUrl(imageUrlFromElement(element), pageUrl)
-      if (normalized && !urls.includes(normalized)) urls.push(normalized)
-    }
-  }
-  return urls
-}
-
-function imageUrlFromElement(element) {
-  if (!element) return null
-  if (element.tagName?.toLowerCase() === 'meta') return element.getAttribute('content')
-  return element.currentSrc
-    || element.getAttribute('data-src')
-    || element.getAttribute('src')
-    || firstSrcsetUrl(element.getAttribute('srcset'))
-}
-
-function firstSrcsetUrl(value) {
-  return String(value || '').split(',').map((part) => part.trim().split(/\s+/u)[0]).find(Boolean) || null
-}
-
 function hasExpectedXsecSource(value, expected) {
   return safeUrl(value)?.searchParams.get('xsec_source') === expected
 }
@@ -519,16 +480,6 @@ function isVisible(element) {
     current = current.parentElement
   }
   return true
-}
-
-function normalizeMediaUrl(value, pageUrl) {
-  if (!value) return null
-  try {
-    const url = new URL(String(value).trim(), pageUrl)
-    return ['http:', 'https:'].includes(url.protocol) ? url.toString() : null
-  } catch {
-    return null
-  }
 }
 
 function safeUrl(value, base) {

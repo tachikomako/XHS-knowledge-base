@@ -173,7 +173,7 @@ public class ImportService {
         item.setTitle(incoming.title().trim());
         item.setContent(trimToNull(incoming.text()));
         item.setAuthor(trimToNull(incoming.author()));
-        item.setCoverUrl(normalizeMediaUrl(incoming.coverUrl()));
+        item.setCoverUrl(null);
         item.setImageUrlsJson("[]");
         item.setCaptureLevel(incoming.captureLevel());
         item.setAiStatus("NOT_REQUESTED");
@@ -208,11 +208,6 @@ public class ImportService {
         }
         changed |= setIfMoreComplete(existing.getContent(), incoming.text(), existing::setContent);
         changed |= setIfMoreComplete(existing.getAuthor(), incoming.author(), existing::setAuthor);
-        changed |= setIfMoreComplete(
-                existing.getCoverUrl(),
-                normalizeMediaUrl(incoming.coverUrl()),
-                existing::setCoverUrl
-        );
 
         if (incomingIsDetail && "CARD".equals(existing.getCaptureLevel())) {
             existing.setCaptureLevel("DETAIL");
@@ -316,23 +311,6 @@ public class ImportService {
 
     private String trimToNull(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
-    }
-
-    private String normalizeMediaUrl(String value) {
-        String normalized = trimToNull(value);
-        if (normalized == null) {
-            return null;
-        }
-        URI uri;
-        try {
-            uri = URI.create(normalized);
-        } catch (IllegalArgumentException exception) {
-            throw new IllegalArgumentException("Invalid media URL");
-        }
-        if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())) {
-            throw new IllegalArgumentException("Media URL must use HTTP or HTTPS");
-        }
-        return normalized;
     }
 
     private String now() {
