@@ -52,6 +52,24 @@ function formatDate(value: string | null) {
   if (!value) return '—'
   return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
+
+function contentStatusLabel(status: string) {
+  return {
+    DISCOVERED: '正文待获取',
+    FETCHING: '正文获取中',
+    COMPLETED: '正文已完成',
+    FAILED: '正文获取失败',
+  }[status] || status
+}
+
+function aiStatusLabel(status: string) {
+  return {
+    NOT_REQUESTED: 'AI 待处理',
+    PENDING: 'AI 整理中',
+    SUCCESS: 'AI 已完成',
+    FAILED: 'AI 失败',
+  }[status] || status
+}
 </script>
 
 <template>
@@ -70,7 +88,8 @@ function formatDate(value: string | null) {
       </div>
 
       <section class="detail-section">
-        <div class="section-heading"><h2>正文</h2><span>{{ item.content ? '已采集' : '未采集' }}</span></div>
+        <div class="section-heading"><h2>正文</h2><span>{{ contentStatusLabel(item.contentStatus) }}</span></div>
+        <p v-if="item.contentStatus === 'FAILED' && item.contentLastError" class="status-error">{{ item.contentLastError }}</p>
         <p class="source-content">{{ item.content || '当前记录暂未采集正文。' }}</p>
         <a :href="item.originalUrl" target="_blank" rel="noopener noreferrer" class="source-link">
           <el-icon><Link /></el-icon>查看小红书原帖
@@ -78,7 +97,7 @@ function formatDate(value: string | null) {
       </section>
 
       <section class="detail-section editor-section">
-        <div class="section-heading"><h2>知识整理</h2><span>手工内容不会被来源同步覆盖</span></div>
+        <div class="section-heading"><h2>知识整理</h2><span>{{ aiStatusLabel(item.aiStatus) }}</span></div>
         <div class="metadata-fields">
           <label>分类
             <el-select v-model="categoryId" clearable placeholder="未分类">

@@ -17,6 +17,7 @@ public record ImportResponse(
             String itemId,
             String sourceItemId,
             String status,
+            String contentStatus,
             String error
     ) {
     }

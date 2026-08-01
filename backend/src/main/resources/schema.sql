@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS knowledge_items (
     original_url TEXT NOT NULL,
     title TEXT NOT NULL,
     content TEXT,
+    content_status TEXT NOT NULL DEFAULT 'DISCOVERED',
+    content_last_error TEXT,
     author TEXT,
     cover_url TEXT,
     image_urls_json TEXT NOT NULL DEFAULT '[]',

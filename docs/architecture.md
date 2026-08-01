@@ -28,6 +28,8 @@ flowchart LR
 - `CARD`: metadata visible on the favorites page. It is the reliable baseline for historical indexing.
 - `DETAIL`: content visible on a currently opened post. Importing `DETAIL` upgrades an existing `CARD`; later card imports never downgrade it.
 
+During a manual favorites/likes sync, the extension first discovers list cards, then opens detail URLs one at a time to complete missing or previously failed text. The backend records item-level content status as `DISCOVERED`, `COMPLETED`, or `FAILED`; a single detail failure does not fail the whole sync run.
+
 ## Source abstraction
 
 The persisted model uses `sourceType`, `sourceItemId`, and `canonicalUrl`. Only `XIAOHONGSHU` is implemented now. Future platforms should add an extractor and URL normalizer without changing item lifecycle, search, categories, or tags.

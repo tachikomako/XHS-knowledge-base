@@ -21,6 +21,7 @@ public class KnowledgeItemService {
 
     private static final Set<String> CAPTURE_LEVELS = Set.of("CARD", "DETAIL");
     private static final Set<String> AI_STATUSES = Set.of("NOT_REQUESTED", "PENDING", "SUCCESS", "FAILED");
+    private static final Set<String> CONTENT_STATUSES = Set.of("DISCOVERED", "FETCHING", "COMPLETED", "FAILED");
 
     private final KnowledgeItemMapper itemMapper;
     private final JdbcTemplate jdbcTemplate;
@@ -40,6 +41,7 @@ public class KnowledgeItemService {
             String sourceType,
             String captureLevel,
             String aiStatus,
+            String contentStatus,
             int page,
             int pageSize,
             String sort
@@ -49,6 +51,7 @@ public class KnowledgeItemService {
         }
         validateOptional(captureLevel, CAPTURE_LEVELS, "captureLevel");
         validateOptional(aiStatus, AI_STATUSES, "aiStatus");
+        validateOptional(contentStatus, CONTENT_STATUSES, "contentStatus");
         if (StringUtils.hasText(query) && query.length() > 200) {
             throw badRequest("QUERY_TOO_LONG", "q must not exceed 200 characters");
         }
@@ -70,6 +73,7 @@ public class KnowledgeItemService {
         wrapper.eq(StringUtils.hasText(sourceType), KnowledgeItemEntity::getSourceType, sourceType);
         wrapper.eq(StringUtils.hasText(captureLevel), KnowledgeItemEntity::getCaptureLevel, captureLevel);
         wrapper.eq(StringUtils.hasText(aiStatus), KnowledgeItemEntity::getAiStatus, aiStatus);
+        wrapper.eq(StringUtils.hasText(contentStatus), KnowledgeItemEntity::getContentStatus, contentStatus);
         if (StringUtils.hasText(query)) {
             String term = query.trim();
             wrapper.and(nested -> nested
@@ -220,6 +224,8 @@ public class KnowledgeItemService {
                 item.getOriginalUrl(),
                 item.getTitle(),
                 item.getContent(),
+                item.getContentStatus(),
+                item.getContentLastError(),
                 item.getAuthor(),
                 item.getCaptureLevel(),
                 item.getSummary(),

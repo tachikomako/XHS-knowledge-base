@@ -62,6 +62,7 @@ class ImportFlowIntegrationTest {
                         .content(importJson("batch-card", "CARD", null)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.created").value(1))
+                .andExpect(jsonPath("$.results[0].contentStatus").value("DISCOVERED"))
                 .andExpect(jsonPath("$.updated").value(0))
                 .andReturn().getResponse().getContentAsString();
 
@@ -87,6 +88,7 @@ class ImportFlowIntegrationTest {
         mockMvc.perform(get("/api/v1/items/{id}", itemId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.captureLevel").value("DETAIL"))
+                .andExpect(jsonPath("$.contentStatus").value("COMPLETED"))
                 .andExpect(jsonPath("$.content").value("完整正文内容"))
                 .andExpect(jsonPath("$.canonicalUrl").value(
                         "https://www.xiaohongshu.com/explore/abc123"));

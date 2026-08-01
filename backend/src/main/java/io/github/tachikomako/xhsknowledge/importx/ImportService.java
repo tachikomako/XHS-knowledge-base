@@ -73,11 +73,11 @@ public class ImportService {
                 switch (result.status()) {
                     case "CREATED" -> {
                         created++;
-                        aiItemIds.add(result.itemId());
+                        if (StringUtils.hasText(incoming.text())) aiItemIds.add(result.itemId());
                     }
                     case "UPDATED" -> {
                         updated++;
-                        aiItemIds.add(result.itemId());
+                        if (StringUtils.hasText(incoming.text())) aiItemIds.add(result.itemId());
                     }
                     default -> skipped++;
                 }
@@ -88,6 +88,7 @@ public class ImportService {
                         null,
                         incoming.sourceItemId(),
                         "FAILED",
+                        null,
                         safeError(exception)
                 ));
             }
@@ -139,7 +140,7 @@ public class ImportService {
         if (existing == null) {
             KnowledgeItemEntity created = createEntity(incoming, source);
             itemMapper.insert(created);
-            return new ImportResponse.ItemResult(index, created.getId(), source.sourceItemId(), "CREATED", null);
+            return new ImportResponse.ItemResult(index, created.getId(), source.sourceItemId(), "CREATED", created.getContentStatus(), null);
         }
         if (!"ACTIVE".equals(existing.getLifecycleStatus())) {
             jdbcTemplate.update("DELETE FROM knowledge_item_tags WHERE item_id = ?", existing.getId());
@@ -148,15 +149,15 @@ public class ImportService {
             itemMapper.deleteById(existing.getId());
             KnowledgeItemEntity created = createEntity(incoming, source);
             itemMapper.insert(created);
-            return new ImportResponse.ItemResult(index, created.getId(), source.sourceItemId(), "CREATED", null);
+            return new ImportResponse.ItemResult(index, created.getId(), source.sourceItemId(), "CREATED", created.getContentStatus(), null);
         }
 
         boolean changed = mergeSourceFields(existing, incoming, source);
         if (changed) {
             itemMapper.updateById(existing);
-            return new ImportResponse.ItemResult(index, existing.getId(), source.sourceItemId(), "UPDATED", null);
+            return new ImportResponse.ItemResult(index, existing.getId(), source.sourceItemId(), "UPDATED", existing.getContentStatus(), null);
         }
-        return new ImportResponse.ItemResult(index, existing.getId(), source.sourceItemId(), "SKIPPED", null);
+        return new ImportResponse.ItemResult(index, existing.getId(), source.sourceItemId(), "SKIPPED", existing.getContentStatus(), null);
     }
 
     private KnowledgeItemEntity createEntity(
@@ -172,6 +173,7 @@ public class ImportService {
         item.setOriginalUrl(incoming.url().trim());
         item.setTitle(incoming.title().trim());
         item.setContent(trimToNull(incoming.text()));
+        applyContentStatus(item, incoming);
         item.setAuthor(trimToNull(incoming.author()));
         item.setCoverUrl(null);
         item.setImageUrlsJson("[]");
@@ -208,6 +210,7 @@ public class ImportService {
         }
         changed |= setIfMoreComplete(existing.getContent(), incoming.text(), existing::setContent);
         changed |= setIfMoreComplete(existing.getAuthor(), incoming.author(), existing::setAuthor);
+        changed |= applyContentStatus(existing, incoming);
 
         if (incomingIsDetail && "CARD".equals(existing.getCaptureLevel())) {
             existing.setCaptureLevel("DETAIL");
@@ -256,6 +259,33 @@ public class ImportService {
             return true;
         }
         return false;
+    }
+
+    private boolean applyContentStatus(KnowledgeItemEntity item, XiaohongshuImportRequest.IncomingItem incoming) {
+        String requested = trimToNull(incoming.contentStatus());
+        String nextStatus = requested;
+        if (nextStatus == null) {
+            nextStatus = StringUtils.hasText(incoming.text()) ? "COMPLETED" : "DISCOVERED";
+        }
+        if (requested == null && !StringUtils.hasText(incoming.text()) && StringUtils.hasText(item.getContentStatus())) {
+            return false;
+        }
+        if ("COMPLETED".equals(nextStatus) && !StringUtils.hasText(incoming.text())) {
+            nextStatus = "FAILED";
+        }
+        String nextError = "FAILED".equals(nextStatus)
+                ? validateError(incoming.contentLastError())
+                : null;
+        boolean changed = !Objects.equals(item.getContentStatus(), nextStatus)
+                || !Objects.equals(item.getContentLastError(), nextError);
+        item.setContentStatus(nextStatus);
+        item.setContentLastError(nextError);
+        return changed;
+    }
+
+    private String validateError(String value) {
+        String normalized = trimToNull(value);
+        return normalized == null ? "Content extraction failed" : normalized.substring(0, Math.min(500, normalized.length()));
     }
 
     private KnowledgeItemEntity findExisting(XiaohongshuUrlNormalizer.NormalizedSource source) {

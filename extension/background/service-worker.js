@@ -115,6 +115,8 @@ async function startManualSync(payload) {
   const summary = createImportSummary()
   const errors = []
   let discoveredCount = 0
+  let contentCompleted = 0
+  let contentFailed = 0
 
   for (const source of requestedSources) {
     try {
@@ -134,6 +136,10 @@ async function startManualSync(payload) {
         items,
       })
       mergeImportResult(summary, imported.result)
+      const completion = await completeMissingContent(tab.id, items, imported.result, discovery.extractorVersion)
+      contentCompleted += completion.completed
+      contentFailed += completion.failed
+      for (const error of completion.errors) errors.push(`${sourceLabel(source)}正文：${error}`)
       for (const warning of discovery.warnings || []) errors.push(`${sourceLabel(source)}：${warning}`)
     } catch (error) {
       errors.push(`${sourceLabel(source)}：${error instanceof Error ? error.message : '同步失败'}`)
@@ -143,7 +149,7 @@ async function startManualSync(payload) {
   const failedSources = errors.filter((error) => !error.includes('重复卡片')).length
   const status = summary.received === 0
     ? 'FAILED'
-    : failedSources > 0 || summary.failed > 0
+    : failedSources > 0 || summary.failed > 0 || contentFailed > 0
       ? 'PARTIAL_FAILED'
       : 'COMPLETED'
   const updated = await updateSyncRun(backendUrl, extensionToken, syncRun.id, {
@@ -153,13 +159,60 @@ async function startManualSync(payload) {
     createdCount: summary.created,
     updatedCount: summary.updated,
     unchangedCount: summary.skipped,
-    contentCompletedCount: 0,
-    contentFailedCount: 0,
+    contentCompletedCount: contentCompleted,
+    contentFailedCount: contentFailed,
     aiCompletedCount: 0,
     aiFailedCount: 0,
     errorSummary: errors.slice(0, 5).join('；') || null,
   })
+  summary.contentCompleted = contentCompleted
+  summary.contentFailed = contentFailed
   return { ok: status !== 'FAILED', result: summary, syncRun: updated, errors }
+}
+
+async function completeMissingContent(tabId, discoveredItems, importResult, extractorVersion) {
+  const bySourceId = new Map(discoveredItems.map((item) => [item.sourceItemId, item]))
+  const candidates = (importResult.results || [])
+    .filter((result) => result.itemId && ['DISCOVERED', 'FAILED'].includes(result.contentStatus))
+    .map((result) => bySourceId.get(result.sourceItemId))
+    .filter(Boolean)
+  const errors = []
+  let completed = 0
+  let failed = 0
+
+  for (const item of candidates) {
+    try {
+      await navigateAndWait(tabId, item.url)
+      const detail = await sendTabMessage(tabId, { type: 'INSPECT_XHS_PAGE' })
+      if (!detail?.ok || !detail.item) throw new Error(detail?.error || '正文提取失败')
+      const detailItem = {
+        ...detail.item,
+        sourceRelation: item.sourceRelation,
+        contentStatus: detail.item.text ? 'COMPLETED' : 'FAILED',
+        contentLastError: detail.item.text ? null : '详情页未识别到正文',
+      }
+      await importItems({ captureMode: 'CURRENT_POST', extractorVersion: detail.extractorVersion, items: [detailItem] })
+      if (detailItem.contentStatus === 'COMPLETED') completed++
+      else failed++
+    } catch (error) {
+      failed++
+      const message = error instanceof Error ? error.message : '正文提取失败'
+      errors.push(`${item.title || item.sourceItemId || item.url}：${message}`)
+      await importItems({
+        captureMode: 'CURRENT_POST',
+        extractorVersion,
+        items: [{
+          ...item,
+          text: null,
+          contentStatus: 'FAILED',
+          contentLastError: message,
+          captureLevel: 'CARD',
+        }],
+      }).catch(() => null)
+    }
+  }
+
+  return { completed, failed, errors }
 }
 
 async function createSyncRun(backendUrl, extensionToken, sources) {

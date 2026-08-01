@@ -31,6 +31,7 @@ Use this checklist for the first installable MVP build.
 - Confirm the extension navigates to `tab=fav&subTab=note` and `tab=liked&subTab=note` only after that click.
 - Sync the same post twice and confirm only one item exists.
 - Confirm a note appearing in both favorites and likes creates one item with two source relations.
+- Confirm newly discovered list items move to completed text when their detail page can be opened, and that failed detail extraction is counted without stopping the sync.
 - Open the saved item and confirm "view original post" keeps the complete `xsec_token` URL behavior.
 - Confirm the website shows no imported visual media and makes no proxied media requests.
 - Delete a saved item and confirm it disappears from the database; sync it again and confirm it is recreated.
