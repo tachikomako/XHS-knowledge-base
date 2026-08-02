@@ -1,5 +1,7 @@
 package io.github.tachikomako.xhsknowledge.ai;
 
+import java.util.List;
+
 public record AiOrganizeBatchResponse(
         int eligible,
         int processed,
@@ -8,6 +10,7 @@ public record AiOrganizeBatchResponse(
         int blockedByContent,
         int blockedByManualLock,
         int skipped,
+        List<String> errors,
         String message
 ) {
 }

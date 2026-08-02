@@ -192,6 +192,38 @@ class AiOrganizationServiceTest {
     }
 
     @Test
+    void batchKeepsGoingWhenOneItemFails() throws Exception {
+        enableAi();
+        String categoryId = insertCategory("AI");
+        insertItem("ai-fail", "COMPLETED", "PENDING", 0);
+        insertItem("ai-success", "COMPLETED", "PENDING", 0);
+        when(qwenClient.configured()).thenReturn(true);
+        when(qwenClient.organize(anyString()))
+                .thenThrow(new RuntimeException("qwen timeout"))
+                .thenReturn(new QwenAiResult(
+                        "Recovered summary",
+                        categoryId,
+                        List.of(),
+                        List.of(),
+                        0.8
+                ));
+
+        mockMvc.perform(post("/api/v1/ai/organize-pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.processed").value(2))
+                .andExpect(jsonPath("$.succeeded").value(1))
+                .andExpect(jsonPath("$.failed").value(1))
+                .andExpect(jsonPath("$.errors[0]").exists());
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM knowledge_items WHERE ai_status = 'COMPLETED'", Integer.class
+        )).isOne();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM knowledge_items WHERE ai_status = 'FAILED' AND ai_last_error IS NOT NULL", Integer.class
+        )).isOne();
+    }
+
+    @Test
     void pendingCountAndBatchUseTheSameEligibilityRules() throws Exception {
         insertItem("discovered-pending", "DISCOVERED", "PENDING", 0);
         insertItem("completed-pending", "COMPLETED", "PENDING", 0);

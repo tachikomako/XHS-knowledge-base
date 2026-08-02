@@ -22,7 +22,6 @@ class QwenClientTest {
     @Test
     void usesRuntimeSettingsForRequests() {
         RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         SettingsService settingsService = mock(SettingsService.class);
         when(settingsService.aiRuntimeSettings()).thenReturn(new SettingsService.AiRuntimeSettings(
                 "saved-secret",
@@ -31,6 +30,7 @@ class QwenClientTest {
         ));
 
         QwenClient client = new QwenClient(new ObjectMapper(), builder, settingsService);
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
 
         server.expect(requestTo("https://saved.example/v1/chat/completions"))
                 .andExpect(method(HttpMethod.POST))

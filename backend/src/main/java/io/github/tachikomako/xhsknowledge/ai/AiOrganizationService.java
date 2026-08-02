@@ -85,13 +85,17 @@ public class AiOrganizationService {
         int processed = 0;
         int succeeded = 0;
         int failed = 0;
+        List<String> errors = new java.util.ArrayList<>();
         for (String itemId : itemIds) {
             processed++;
             try {
-                organizeManually(itemId);
+                markProcessing(itemId);
+                organizeNow(itemId);
                 succeeded++;
             } catch (Exception exception) {
                 failed++;
+                markFailed(itemId, exception);
+                errors.add("%s: %s".formatted(itemId, safeError(exception)));
             }
         }
         return batchResponse(
@@ -100,6 +104,7 @@ public class AiOrganizationService {
                 succeeded,
                 failed,
                 Math.max(0, stats.eligible() - processed),
+                errors,
                 "已处理 %d 条，成功 %d 条，失败 %d 条".formatted(processed, succeeded, failed)
         );
     }
@@ -159,6 +164,18 @@ public class AiOrganizationService {
             int skipped,
             String message
     ) {
+        return batchResponse(stats, processed, succeeded, failed, skipped, List.of(), message);
+    }
+
+    private AiOrganizeBatchResponse batchResponse(
+            AiEligibilityService.AiEligibilityStats stats,
+            int processed,
+            int succeeded,
+            int failed,
+            int skipped,
+            List<String> errors,
+            String message
+    ) {
         return new AiOrganizeBatchResponse(
                 stats.eligible(),
                 processed,
@@ -167,8 +184,15 @@ public class AiOrganizationService {
                 stats.blockedByContent(),
                 stats.blockedByManualLock(),
                 skipped,
+                errors,
                 message
         );
+    }
+
+    private String safeError(Exception exception) {
+        String message = exception.getMessage();
+        if (!StringUtils.hasText(message)) return exception.getClass().getSimpleName();
+        return limit(message, 200);
     }
 
     private String noEligibleMessage(AiEligibilityService.AiEligibilityStats stats) {

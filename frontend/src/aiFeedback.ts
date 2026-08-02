@@ -2,9 +2,11 @@ import type { AiOrganizeBatchResponse } from './api/items'
 
 export function organizePendingFeedback(result: AiOrganizeBatchResponse) {
   if (result.processed > 0) {
+    const message = result.message || `已处理 ${result.processed} 条，成功 ${result.succeeded} 条，失败 ${result.failed} 条`
+    const errors = result.errors?.length ? `；错误：${result.errors.slice(0, 3).join('；')}` : ''
     return {
-      type: 'success' as const,
-      message: result.message || `已处理 ${result.processed} 条，成功 ${result.succeeded} 条，失败 ${result.failed} 条`,
+      type: result.failed > 0 ? 'warning' as const : 'success' as const,
+      message: `${message}${errors}`,
     }
   }
   return {

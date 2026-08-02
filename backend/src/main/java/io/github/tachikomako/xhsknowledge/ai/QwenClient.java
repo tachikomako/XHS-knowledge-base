@@ -4,15 +4,20 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.tachikomako.xhsknowledge.settings.SettingsService;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
 @Component
 public class QwenClient {
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration READ_TIMEOUT = Duration.ofSeconds(60);
+
 
     private final ObjectMapper objectMapper;
     private final RestClient.Builder restClientBuilder;
@@ -24,7 +29,7 @@ public class QwenClient {
             SettingsService settingsService
     ) {
         this.objectMapper = objectMapper;
-        this.restClientBuilder = restClientBuilder;
+        this.restClientBuilder = restClientBuilder.requestFactory(timeoutRequestFactory());
         this.settingsService = settingsService;
     }
 
@@ -98,6 +103,15 @@ public class QwenClient {
     }
 
     private RestClient restClient(SettingsService.AiRuntimeSettings settings) {
-        return restClientBuilder.clone().baseUrl(settings.baseUrl()).build();
+        return restClientBuilder.clone()
+                .baseUrl(settings.baseUrl())
+                .build();
+    }
+
+    private SimpleClientHttpRequestFactory timeoutRequestFactory() {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(CONNECT_TIMEOUT);
+        requestFactory.setReadTimeout(READ_TIMEOUT);
+        return requestFactory;
     }
 }
