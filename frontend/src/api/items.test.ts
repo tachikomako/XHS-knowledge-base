@@ -62,7 +62,7 @@ describe('knowledge item API', () => {
   it('sends manual AI organization requests', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'item/1', aiStatus: 'COMPLETED' }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ processed: 1, succeeded: 1, failed: 0, skipped: 0 }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ processed: 1, succeeded: 1, failed: 0, skipped: 0, errors: [] }) })
     vi.stubGlobal('fetch', fetchMock)
 
     await organizeItem('item/1')
@@ -73,7 +73,20 @@ describe('knowledge item API', () => {
     }))
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/ai/organize-pending', expect.objectContaining({
       method: 'POST',
+      signal: expect.any(AbortSignal),
     }))
+  })
+
+  it('times out pending AI organization requests', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn((_url, options: RequestInit) => new Promise((_resolve, reject) => {
+      options.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+    })))
+
+    const assertion = expect(organizePendingAi()).rejects.toThrow('AI 批量整理超时')
+    await vi.advanceTimersByTimeAsync(120_000)
+    await assertion
+    vi.useRealTimers()
   })
 
   it('uses the backend error message when available', async () => {

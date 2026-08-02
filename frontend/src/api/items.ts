@@ -63,6 +63,7 @@ export interface AiOrganizeBatchResponse {
   blockedByContent: number
   blockedByManualLock: number
   skipped: number
+  errors: string[]
   message: string | null
 }
 
@@ -100,7 +101,12 @@ export function organizeItem(id: string): Promise<KnowledgeItem> {
 }
 
 export function organizePendingAi(): Promise<AiOrganizeBatchResponse> {
-  return requestJson('/api/v1/ai/organize-pending', { method: 'POST' })
+  const controller = new AbortController()
+  const timeoutId = globalThis.setTimeout(() => controller.abort(), 120_000)
+  return requestJson<AiOrganizeBatchResponse>('/api/v1/ai/organize-pending', {
+    method: 'POST',
+    signal: controller.signal,
+  }).finally(() => globalThis.clearTimeout(timeoutId))
 }
 
 export async function deleteItem(id: string): Promise<void> {
@@ -116,13 +122,21 @@ export function clearItems(confirmation: string): Promise<{ deletedItems: number
 }
 
 async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Accept: 'application/json',
-      ...options.headers,
-    },
-  })
+  let response
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: {
+        Accept: 'application/json',
+        ...options.headers,
+      },
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('AI 批量整理超时，请稍后重试')
+    }
+    throw error
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { message?: string } | null
     throw new Error(body?.message || `后端返回 ${response.status}`)

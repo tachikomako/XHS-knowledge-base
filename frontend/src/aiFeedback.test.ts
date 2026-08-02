@@ -10,6 +10,7 @@ const base: AiOrganizeBatchResponse = {
   blockedByContent: 0,
   blockedByManualLock: 0,
   skipped: 0,
+  errors: [],
   message: null,
 }
 
@@ -28,16 +29,17 @@ describe('AI pending feedback', () => {
     expect(feedback.message).not.toContain('成功 0')
   })
 
-  it('uses processing stats when items were processed', () => {
+  it('uses warning feedback and errors when processed items fail', () => {
     expect(organizePendingFeedback({
       ...base,
       eligible: 3,
       processed: 3,
       succeeded: 2,
       failed: 1,
+      errors: ['item-1: timeout'],
     })).toEqual({
-      type: 'success',
-      message: '已处理 3 条，成功 2 条，失败 1 条',
+      type: 'warning',
+      message: '已处理 3 条，成功 2 条，失败 1 条；错误：item-1: timeout',
     })
   })
 })
