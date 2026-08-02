@@ -9,7 +9,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return discoverList(message.source, { extractFavoritesPage, extractLikedPage })
       }
       const page = detectPage(window.location.href, document)
-      if (page.pageType === 'CURRENT_POST') return extractCurrentPost(document, window.location.href)
+      if (page.pageType === 'CURRENT_POST') return waitForCurrentPost(extractCurrentPost)
       if (page.pageType === 'FAVORITE') {
         const response = await chrome.runtime.sendMessage({ type: 'READ_XHS_ACCESS_CONTEXT' }).catch(() => null)
         return extractFavoritesPage(document, window.location.href, new Date(), response?.accessContexts || [])
@@ -34,6 +34,29 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 function getExtractor() {
   extractorPromise ||= import(chrome.runtime.getURL('content/extractor-core.js'))
   return extractorPromise
+}
+
+async function waitForCurrentPost(extractCurrentPost) {
+  const startedAt = Date.now()
+  let latest = null
+  while (Date.now() - startedAt < 15_000) {
+    latest = extractCurrentPost(document, window.location.href)
+    if (latest.item?.text) return withDetailDiagnostics(latest)
+    await sleep(800)
+  }
+  return withDetailDiagnostics(latest)
+}
+
+function withDetailDiagnostics(result) {
+  return {
+    ...result,
+    diagnostics: {
+      pageType: result?.pageType || 'CURRENT_POST',
+      noteId: result?.item?.sourceItemId || null,
+      contentLength: String(result?.item?.text || '').length,
+      errorCode: result?.item?.text ? null : result?.item?.contentLastError || 'EMPTY_DETAIL_TEXT',
+    },
+  }
 }
 
 async function discoverList(source, extractors) {
