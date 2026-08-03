@@ -125,6 +125,27 @@ test('extracts liked cards without mixing favorite or profile links', () => {
   assert.deepEqual(result.items.map((item) => item.sourceItemId), ['liked-001'])
 })
 
+test('extracts bare liked links from the active liked panel only', () => {
+  const document = parseHTML(`
+    <html><body>
+      <main id="posted-panel" role="tabpanel">
+        <a href="/explore/profile-001?xsec_token=posted&amp;xsec_source=pc_profile" title="我发布的帖子"></a>
+      </main>
+      <button role="tab" aria-selected="true" aria-controls="liked-panel">点赞</button>
+      <main id="liked-panel" role="tabpanel">
+        <a href="/explore/liked-001" title="点赞的帖子"></a>
+      </main>
+    </body></html>
+  `).document
+  const result = extractLikedPage(
+    document,
+    'https://www.xiaohongshu.com/user/profile/fixture?tab=liked&subTab=note',
+  )
+
+  assert.deepEqual(result.items.map((item) => item.sourceItemId), ['liked-001'])
+  assert.equal(result.items[0].url, 'https://www.xiaohongshu.com/explore/liked-001')
+})
+
 test('extracts URL-confirmed favorites without a fixed container', () => {
   const document = parseHTML(`
     <html><body><main>

@@ -68,12 +68,22 @@ async function discoverList(source, extractors) {
 
   for (let round = 0; round < 30 && itemsById.size < 500 && Date.now() - startedAt < 60_000; round++) {
     const response = await chrome.runtime.sendMessage({ type: 'READ_XHS_ACCESS_CONTEXT' }).catch(() => null)
-    latest = extract(document, window.location.href, new Date(), response?.accessContexts || [])
+    try {
+      latest = extract(document, window.location.href, new Date(), response?.accessContexts || [])
+    } catch (error) {
+      if (Date.now() - startedAt > 15_000) throw error
+      await sleep(800)
+      continue
+    }
     const before = itemsById.size
     for (const item of latest.items) {
       itemsById.set(item.sourceItemId || item.url, item)
     }
     noNewRounds = itemsById.size === before ? noNewRounds + 1 : 0
+    if (itemsById.size === 0 && Date.now() - startedAt < 15_000) {
+      await sleep(800)
+      continue
+    }
     if (noNewRounds >= 3) break
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'auto' })
     await sleep(900)

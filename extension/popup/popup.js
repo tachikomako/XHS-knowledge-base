@@ -15,10 +15,10 @@ const statusDetail = document.querySelector('#statusDetail')
 const openButton = document.querySelector('#openKnowledgeBase')
 const captureButton = document.querySelector('#captureButton')
 const startSyncButton = document.querySelector('#startSyncButton')
+const syncRescanButton = document.querySelector('#syncRescanButton')
 const sourceFavorite = document.querySelector('#sourceFavorite')
 const sourceLiked = document.querySelector('#sourceLiked')
 const completeFavoriteContent = document.querySelector('#completeFavoriteContent')
-const aiAfterSync = document.querySelector('#aiAfterSync')
 const syncResult = document.querySelector('#syncResult')
 const latestSync = document.querySelector('#latestSync')
 const captureTitle = document.querySelector('#captureTitle')
@@ -85,7 +85,7 @@ startSyncButton.addEventListener('click', async () => {
     return
   }
   if (completeFavoriteContent.checked && sources.includes('FAVORITE')) {
-    const confirmed = window.confirm('补全收藏正文会逐篇打开详情页，耗时更长。继续吗？')
+    const confirmed = window.confirm('补全正文需要逐篇打开收藏帖子，耗时较长。\n预计每 10 篇约需 3～5 分钟，实际时间取决于网络和页面加载速度。')
     if (!confirmed) return
   }
   startSyncButton.disabled = true
@@ -107,6 +107,7 @@ startSyncButton.addEventListener('click', async () => {
 
 sourceFavorite.addEventListener('change', updateSyncButton)
 sourceLiked.addEventListener('change', updateSyncButton)
+syncRescanButton.addEventListener('click', scanBatchPanel)
 rescanButton.addEventListener('click', inspectCurrentPage)
 
 copyDiagnostics.addEventListener('click', () => {
@@ -194,6 +195,38 @@ async function inspectCurrentPage() {
   }
 }
 
+async function scanBatchPanel() {
+  syncRescanButton.disabled = true
+  syncRescanButton.setAttribute('aria-busy', 'true')
+  syncRescanButton.textContent = '扫描中…'
+  renderSyncResult('正在重新读取当前小红书页面…', '')
+  try {
+    const response = await withTimeout(inspectActiveTab(), 10_000)
+    if (!response?.ok) throw new Error(response?.error || '页面识别失败')
+    if (response.pageType === 'FAVORITE') {
+      renderSyncResult(`已识别收藏页面，当前发现 ${response.stats?.extracted ?? response.postCount ?? 0} 篇帖子`, 'success')
+      renderDiagnostics(response.stats || {}, response.extractorVersion, 'FAVORITES_PAGE')
+      return
+    }
+    if (response.pageType === 'LIKED') {
+      renderSyncResult(`已识别点赞页面，当前发现 ${response.stats?.extracted ?? response.postCount ?? 0} 篇帖子`, 'success')
+      renderDiagnostics(response.stats || {}, response.extractorVersion, 'LIKED_PAGE')
+      return
+    }
+    if (response.pageType === 'CURRENT_POST') {
+      renderSyncResult('已识别单篇帖子；批量同步请打开个人主页的收藏或点赞页面', 'error')
+      return
+    }
+    renderSyncResult(response.reason || '未识别到收藏或点赞列表，请打开个人主页对应标签后重试', 'error')
+  } catch (error) {
+    renderSyncResult(error instanceof Error ? error.message : '重新扫描失败', 'error')
+  } finally {
+    syncRescanButton.disabled = false
+    syncRescanButton.removeAttribute('aria-busy')
+    syncRescanButton.textContent = '重新扫描'
+  }
+}
+
 async function inspectActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   if (!tab?.id) throw new Error('无法读取当前标签页')
@@ -239,7 +272,6 @@ async function performManualSync(sources) {
     type: 'START_MANUAL_SYNC',
     payload: {
       sources,
-      aiAfterSync: aiAfterSync.checked,
       completeFavoriteContent: completeFavoriteContent.checked && sources.includes('FAVORITE'),
       extensionBuild: EXTENSION_BUILD,
     },

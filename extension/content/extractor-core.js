@@ -87,7 +87,8 @@ export function detectPage(url, document) {
     return { pageType: 'FAVORITE', canClip: false, canBatch: postCount > 1, postCount }
   }
   if (profileTab === 'LIKED') {
-    const postCount = countPostLinks(document, url)
+    const root = findProfileListRoot(document, 'LIKED')
+    const postCount = countPostLinks(root || document, url)
     return { pageType: 'LIKED', canClip: false, canBatch: postCount > 0, postCount }
   }
 
@@ -145,7 +146,7 @@ function extractProfileListPage(document, pageUrl, source, capturedAt = new Date
 
   for (const card of candidates) {
     if (items.length >= 500) break
-    const extracted = extractCard(card, pageUrl, timestamp, accessContextByNoteId, config.xsecSource)
+    const extracted = extractCard(card, pageUrl, timestamp, accessContextByNoteId, config.xsecSource, source === 'FAVORITE')
     if (!extracted) {
       skipped++
       continue
@@ -159,7 +160,11 @@ function extractProfileListPage(document, pageUrl, source, capturedAt = new Date
     }
     if (extracted.accessSource === 'PAGE_STATE') stateTokenMatchCount++
     const item = extracted.item
-    if (!hasExpectedXsecSource(item.url, config.xsecSource)) {
+    if (source === 'FAVORITE' && !hasExpectedXsecSource(item.url, config.xsecSource)) {
+      skipped++
+      continue
+    }
+    if (source === 'LIKED' && hasKnownOtherXsecSource(item.url, config.xsecSource)) {
       skipped++
       continue
     }
@@ -221,7 +226,8 @@ export function buildXiaohongshuAccessUrl({
     completeCandidate.hash = ''
     return completeCandidate.toString()
   }
-  if (!noteId || !xsecToken) return null
+  if (!noteId) return null
+  if (!xsecToken) return new URL(`/explore/${noteId}`, 'https://www.xiaohongshu.com').toString()
 
   const url = new URL(`/explore/${noteId}`, 'https://www.xiaohongshu.com')
   url.searchParams.set('xsec_token', xsecToken)
@@ -396,7 +402,7 @@ function isPostLink(value, base) {
   return POST_PATH_PATTERN.test(safeUrl(value, base)?.pathname || '')
 }
 
-function extractCard(card, pageUrl, capturedAt, accessContextByNoteId, defaultXsecSource = 'pc_collect') {
+function extractCard(card, pageUrl, capturedAt, accessContextByNoteId, defaultXsecSource = 'pc_collect', requireAccessContext = true) {
   const anchors = card.matches?.('a[href]')
     ? [card, ...card.querySelectorAll('a[href]')]
     : [...card.querySelectorAll('a[href]')]
@@ -423,6 +429,9 @@ function extractCard(card, pageUrl, capturedAt, accessContextByNoteId, defaultXs
     xsecSource: context?.xsecSource || defaultXsecSource,
   })
   const hadCompleteHref = hrefCandidates.some((href) => accessUrlScore(safeUrl(href, pageUrl)) === 3)
+  if (requireAccessContext && !context && !hadCompleteHref) {
+    return { status: 'SKIPPED_MISSING_ACCESS_CONTEXT', noteId, hadCompleteHref }
+  }
   if (!postUrl) return { status: 'SKIPPED_MISSING_ACCESS_CONTEXT', noteId, hadCompleteHref }
 
   const title = limit(
@@ -477,6 +486,11 @@ function canonicalPostKey(value) {
 
 function hasExpectedXsecSource(value, expected) {
   return safeUrl(value)?.searchParams.get('xsec_source') === expected
+}
+
+function hasKnownOtherXsecSource(value, expected) {
+  const source = safeUrl(value)?.searchParams.get('xsec_source')
+  return Boolean(source && source !== expected)
 }
 
 function isVisible(element) {
