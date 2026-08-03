@@ -31,14 +31,16 @@
           <label class="checkbox-row"><input id="sourceFavorite" type="checkbox" checked /> 我的收藏</label>
           <label class="checkbox-row"><input id="sourceLiked" type="checkbox" /> 我的点赞</label>
         </div>
-        <p class="sync-mode">同步列表并打开详情页补全正文。</p>
+        <p class="sync-mode">默认快速同步列表，不打开详情页。</p>
+        <label class="checkbox-row"><input id="completeFavoriteContent" type="checkbox" /> 补全收藏正文</label>
         <label class="checkbox-row"><input id="aiAfterSync" type="checkbox" checked /> 同步后自动生成摘要、分类和标签</label>
         <button type="button" class="primary" id="startSyncButton">开始同步</button>
         <p class="capture-result" id="syncResult"></p>
         <p class="latest-sync" id="latestSync">最近同步：暂无记录</p>
       </section>
 
-      <section class="capture-card" id="captureCard" aria-live="polite">
+      <details class="capture-card" id="captureCard" aria-live="polite">
+        <summary>调试与单篇剪藏</summary>
         <span class="eyebrow">当前页面</span>
         <h2 id="captureTitle">正在识别…</h2>
         <p id="captureMeta">请稍候</p>
@@ -53,7 +55,7 @@
           <textarea id="diagnosticText" rows="5" readonly></textarea>
           <button type="button" class="copy-button" id="copyDiagnostics">复制诊断</button>
         </details>
-      </section>
+      </details>
 
       <button type="button" class="secondary" id="openKnowledgeBase">打开知识库</button>
 

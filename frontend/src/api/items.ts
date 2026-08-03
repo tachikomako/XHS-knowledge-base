@@ -1,5 +1,6 @@
 export type CaptureLevel = 'CARD' | 'DETAIL'
 export type ContentStatus = 'DISCOVERED' | 'FETCHING' | 'COMPLETED' | 'FAILED'
+export type SourceScope = 'ALL' | 'FAVORITE' | 'LIKED' | 'BOTH'
 
 export interface KnowledgeItem {
   id: string
@@ -12,6 +13,7 @@ export interface KnowledgeItem {
   contentStatus: ContentStatus
   contentLastError: string | null
   sourceTags: string[]
+  sourceRelations: string[]
   author: string | null
   captureLevel: CaptureLevel
   summary: string | null
@@ -41,6 +43,7 @@ export interface ItemSearchParams {
   categoryId?: string
   tagId?: string
   sourceType?: string
+  sourceScope?: SourceScope | ''
   captureLevel?: CaptureLevel | ''
   contentStatus?: ContentStatus | ''
   page?: number
@@ -76,6 +79,7 @@ export async function searchItems(
   appendIfPresent(query, 'categoryId', params.categoryId)
   appendIfPresent(query, 'tagId', params.tagId)
   appendIfPresent(query, 'sourceType', params.sourceType)
+  appendIfPresent(query, 'sourceScope', params.sourceScope)
   appendIfPresent(query, 'captureLevel', params.captureLevel)
   appendIfPresent(query, 'contentStatus', params.contentStatus)
   appendIfPresent(query, 'page', params.page ?? 1)

@@ -181,7 +181,7 @@ public class SettingsService {
                 SELECT COUNT(*)
                 FROM knowledge_items
                 WHERE lifecycle_status = 'ACTIVE'
-                  AND content_status = 'COMPLETED'
+                  AND trim(title) <> ''
                   AND manual_metadata_locked = 0
                   AND ai_status IN (%s)
                 """.formatted(placeholders), Integer.class, args);

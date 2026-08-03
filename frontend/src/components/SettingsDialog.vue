@@ -128,7 +128,10 @@ function syncStatusLabel(status: SyncRunResponse['status']) {
           更新 {{ latestSyncRun.updatedCount }} ·
           未变 {{ latestSyncRun.unchangedCount }}
         </p>
-        <p v-if="latestSyncRun?.errorSummary">{{ latestSyncRun.errorSummary }}</p>
+        <details v-if="latestSyncRun?.errorSummary" class="sync-diagnostics">
+          <summary>查看同步详情</summary>
+          <p>{{ latestSyncRun.errorSummary }}</p>
+        </details>
         <p v-if="!latestSyncRun">暂无同步记录。</p>
       </section>
 
