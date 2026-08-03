@@ -26,15 +26,17 @@
       </section>
 
       <section class="sync-card" aria-live="polite">
-        <span class="eyebrow">手动同步</span>
+        <span class="eyebrow">小红书知识库同步</span>
         <div class="sync-options">
           <label class="checkbox-row"><input id="sourceFavorite" type="checkbox" checked /> 我的收藏</label>
           <label class="checkbox-row"><input id="sourceLiked" type="checkbox" /> 我的点赞</label>
         </div>
         <p class="sync-mode">默认快速同步列表，不打开详情页。</p>
         <label class="checkbox-row"><input id="completeFavoriteContent" type="checkbox" /> 补全收藏正文</label>
-        <label class="checkbox-row"><input id="aiAfterSync" type="checkbox" checked /> 同步后自动生成摘要、分类和标签</label>
-        <button type="button" class="primary" id="startSyncButton">开始同步</button>
+        <div class="capture-actions">
+          <button type="button" class="rescan-button" id="syncRescanButton">重新扫描</button>
+          <button type="button" class="primary" id="startSyncButton">开始同步</button>
+        </div>
         <p class="capture-result" id="syncResult"></p>
         <p class="latest-sync" id="latestSync">最近同步：暂无记录</p>
       </section>

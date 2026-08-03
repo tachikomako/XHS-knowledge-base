@@ -20,6 +20,7 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -98,7 +99,7 @@ class AiOrganizationServiceTest {
         String itemId = importItem();
         when(qwenClient.organize(anyString())).thenReturn(new QwenAiResult(
                 "这是一个 AI 工具教程。",
-                "default-technology",
+                null,
                 List.of(),
                 List.of("AI工具"),
                 0.8
@@ -178,13 +179,12 @@ class AiOrganizationServiceTest {
                 0.8
         ));
 
-        mockMvc.perform(post("/api/v1/ai/organize-pending"))
+        String taskId = objectMapper.readTree(mockMvc.perform(post("/api/v1/ai/organize-pending"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.eligible").value(1))
-                .andExpect(jsonPath("$.processed").value(1))
-                .andExpect(jsonPath("$.succeeded").value(1))
-                .andExpect(jsonPath("$.failed").value(0))
-                .andExpect(jsonPath("$.message").value("已处理 1 条，成功 1 条，失败 0 条"));
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.total").value(1))
+                .andReturn().getResponse().getContentAsString()).path("id").asText();
+        waitForTask(taskId);
 
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT summary FROM knowledge_items WHERE id = ?", String.class, itemId
@@ -208,7 +208,12 @@ class AiOrganizationServiceTest {
                         0.8
                 ));
 
-        mockMvc.perform(post("/api/v1/ai/organize-pending"))
+        String taskId = objectMapper.readTree(mockMvc.perform(post("/api/v1/ai/organize-pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.total").value(2))
+                .andReturn().getResponse().getContentAsString()).path("id").asText();
+        mockMvc.perform(get("/api/v1/ai/organize-tasks/{id}", waitForTask(taskId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.processed").value(2))
                 .andExpect(jsonPath("$.succeeded").value(1))
@@ -244,8 +249,7 @@ class AiOrganizationServiceTest {
 
         mockMvc.perform(post("/api/v1/ai/organize-pending"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.eligible").value(1))
-                .andExpect(jsonPath("$.processed").value(0))
+                .andExpect(jsonPath("$.status").value("REJECTED"))
                 .andExpect(jsonPath("$.message").value("AI 整理尚未开启"));
     }
 
@@ -257,8 +261,7 @@ class AiOrganizationServiceTest {
 
         mockMvc.perform(post("/api/v1/ai/organize-pending"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.eligible").value(1))
-                .andExpect(jsonPath("$.processed").value(0))
+                .andExpect(jsonPath("$.status").value("REJECTED"))
                 .andExpect(jsonPath("$.message").value("请先在设置中配置并测试 Qwen API"));
     }
 
@@ -271,23 +274,21 @@ class AiOrganizationServiceTest {
 
         mockMvc.perform(post("/api/v1/ai/organize-pending"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.eligible").value(0))
-                .andExpect(jsonPath("$.blockedByContent").value(1))
+                .andExpect(jsonPath("$.status").value("REJECTED"))
                 .andExpect(jsonPath("$.message").value("没有可整理内容，条目需要至少包含标题"));
 
         jdbcTemplate.update("UPDATE knowledge_items SET title = 'locked item', manual_metadata_locked = 1 WHERE id = ?", "blank-title");
 
         mockMvc.perform(post("/api/v1/ai/organize-pending"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.eligible").value(0))
-                .andExpect(jsonPath("$.blockedByManualLock").value(1))
+                .andExpect(jsonPath("$.status").value("REJECTED"))
                 .andExpect(jsonPath("$.message").value("待处理内容已被用户手动锁定"));
 
         jdbcTemplate.update("DELETE FROM knowledge_items");
 
         mockMvc.perform(post("/api/v1/ai/organize-pending"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.eligible").value(0))
+                .andExpect(jsonPath("$.status").value("REJECTED"))
                 .andExpect(jsonPath("$.message").value("当前没有需要 AI 整理的内容"));
     }
 
@@ -359,5 +360,19 @@ class AiOrganizationServiceTest {
                 INSERT INTO app_settings(key, value, updated_at) VALUES ('ai.enabled', 'true', '2026-08-01T00:00:00Z')
                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
                 """);
+    }
+
+    private String waitForTask(String taskId) throws Exception {
+        for (int attempt = 0; attempt < 50; attempt++) {
+            String body = mockMvc.perform(get("/api/v1/ai/organize-tasks/{id}", taskId))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            String status = objectMapper.readTree(body).path("status").asText();
+            if (status.equals("COMPLETED") || status.equals("COMPLETED_WITH_ERRORS") || status.equals("REJECTED")) {
+                return taskId;
+            }
+            Thread.sleep(100);
+        }
+        return taskId;
     }
 }

@@ -151,7 +151,7 @@ function sourceLabel(item: KnowledgeItem) {
             :loading="organizing"
             :disabled="item.manualMetadataLocked || item.aiStatus === 'PROCESSING'"
             @click="$emit('organize')"
-          >重新 AI 整理</el-button>
+          >AI 分类当前帖子</el-button>
         </div>
       </section>
 

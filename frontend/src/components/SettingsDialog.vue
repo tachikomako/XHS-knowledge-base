@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive, watch } from 'vue'
+import type { AiOrganizeTask } from '../api/items'
 import type { AiSettingsUpdate, SettingsResponse, SyncRunResponse } from '../api/settings'
 
 const MASKED_KEY = '••••••••••••••••'
@@ -12,6 +13,7 @@ const props = defineProps<{
   saving: boolean
   testingAi: boolean
   organizingPending: boolean
+  aiTask: AiOrganizeTask | null
 }>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -68,8 +70,8 @@ function syncStatusLabel(status: SyncRunResponse['status']) {
       <section class="settings-block">
         <div class="settings-row">
           <div>
-            <h3>AI 自动整理</h3>
-            <p>开启后，新导入或更新的内容会在后台尝试生成摘要、分类和标签。</p>
+            <h3>AI 分类</h3>
+            <p>保存 Qwen 配置后，可在知识库中手动分类单篇、所选或全部待分类帖子。</p>
           </div>
           <el-switch v-model="form.aiEnabled" :disabled="loading || saving" />
         </div>
@@ -115,7 +117,8 @@ function syncStatusLabel(status: SyncRunResponse['status']) {
       </section>
 
       <section class="settings-actions">
-        <el-button type="primary" plain :loading="organizingPending" @click="$emit('organizePending')">整理待处理内容</el-button>
+        <el-button type="primary" plain :loading="organizingPending" @click="$emit('organizePending')">分类全部待分类帖子</el-button>
+        <span v-if="aiTask">正在分类：{{ aiTask.processed }} / {{ aiTask.total }} · 成功：{{ aiTask.succeeded }} · 失败：{{ aiTask.failed }}</span>
       </section>
 
       <section class="settings-note">

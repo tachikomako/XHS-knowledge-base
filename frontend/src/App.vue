@@ -2,8 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Collection, Connection, Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { clearItems, deleteItem, getItem, organizeItem, organizePendingAi, searchItems, updateItem } from './api/items'
-import type { KnowledgeItem } from './api/items'
+import { clearItems, deleteItem, getAiTask, getItem, organizeItem, organizePendingAi, organizeSelectedAi, searchItems, updateItem } from './api/items'
+import type { AiOrganizeTask, KnowledgeItem } from './api/items'
 import {
   confirmCategorySuggestions,
   createCategory,
@@ -22,7 +22,6 @@ import type { Category, CategoryInput, CategorySuggestion, SourceTag, Tag } from
 import { clearAiCredentials, fetchLatestSyncRun, fetchSettings, testAiConnection, updateAiSettings } from './api/settings'
 import type { AiSettingsUpdate } from './api/settings'
 import type { SettingsResponse, SyncRunResponse } from './api/settings'
-import { organizePendingFeedback } from './aiFeedback'
 import KnowledgeCard from './components/KnowledgeCard.vue'
 import KnowledgeDetailDrawer from './components/KnowledgeDetailDrawer.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
@@ -59,6 +58,8 @@ const settingsLoading = ref(false)
 const settingsSaving = ref(false)
 const aiTesting = ref(false)
 const aiOrganizingPending = ref(false)
+const aiTask = ref<AiOrganizeTask | null>(null)
+const selectedIds = ref<string[]>([])
 const settings = ref<SettingsResponse | null>(null)
 const latestSyncRun = ref<SyncRunResponse | null>(null)
 
@@ -66,6 +67,7 @@ let listController: AbortController | null = null
 let detailController: AbortController | null = null
 let metadataController: AbortController | null = null
 let settingsController: AbortController | null = null
+let aiPollTimer: number | null = null
 
 const tagNames = computed(() => Object.fromEntries(tags.value.map((tag) => [tag.id, tag.name])))
 const orderedCategories = computed(() => {
@@ -105,6 +107,7 @@ onBeforeUnmount(() => {
   detailController?.abort()
   metadataController?.abort()
   settingsController?.abort()
+  if (aiPollTimer !== null) window.clearTimeout(aiPollTimer)
 })
 
 watch([categoryId, tagId, sourceScope], () => {
@@ -235,15 +238,67 @@ async function clearAiKey() {
 async function organizePending() {
   aiOrganizingPending.value = true
   try {
-    const result = await organizePendingAi()
-    const feedback = organizePendingFeedback(result)
-    ElMessage[feedback.type](feedback.message)
-    await Promise.all([loadItems(), loadMetadata(), loadSettings()])
+    await watchAiTask(await organizePendingAi())
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '整理待处理内容失败')
-  } finally {
     aiOrganizingPending.value = false
   }
+}
+
+async function organizeSelected() {
+  if (selectedIds.value.length === 0) {
+    ElMessage.warning('请先选择帖子')
+    return
+  }
+  aiOrganizingPending.value = true
+  try {
+    await watchAiTask(await organizeSelectedAi(selectedIds.value))
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : 'AI 分类失败')
+    aiOrganizingPending.value = false
+  }
+}
+
+async function watchAiTask(task: AiOrganizeTask) {
+  aiTask.value = task
+  if (task.status === 'REJECTED' || !task.id) {
+    ElMessage.warning(task.message || '没有可分类内容')
+    aiOrganizingPending.value = false
+    return
+  }
+  ElMessage.success('AI 分类任务已创建')
+  pollAiTask(task.id)
+}
+
+function pollAiTask(id: string) {
+  if (aiPollTimer !== null) window.clearTimeout(aiPollTimer)
+  aiPollTimer = window.setTimeout(async () => {
+    try {
+      const task = await getAiTask(id)
+      aiTask.value = task
+      if (['COMPLETED', 'COMPLETED_WITH_ERRORS', 'REJECTED'].includes(task.status)) {
+        aiOrganizingPending.value = false
+        selectedIds.value = []
+        await Promise.all([loadItems(), loadMetadata(), loadSettings()])
+        ElMessage[task.failed > 0 ? 'warning' : 'success'](task.message || 'AI 分类完成')
+        return
+      }
+      pollAiTask(id)
+    } catch (error) {
+      aiOrganizingPending.value = false
+      ElMessage.error(error instanceof Error ? error.message : '读取 AI 任务进度失败')
+    }
+  }, 1200)
+}
+
+function toggleSelect(item: KnowledgeItem) {
+  selectedIds.value = selectedIds.value.includes(item.id)
+    ? selectedIds.value.filter((id) => id !== item.id)
+    : [...selectedIds.value, item.id]
+}
+
+function aiTaskText(task: AiOrganizeTask) {
+  return `正在分类：${task.processed} / ${task.total} · 成功：${task.succeeded} · 失败：${task.failed}`
 }
 
 function filterByTag(selectedTagId: string) {
@@ -552,6 +607,12 @@ function replaceItem(updated: KnowledgeItem) {
         <el-button size="large" :icon="Setting" @click="taxonomyVisible = true">管理</el-button>
         <el-button size="large" type="danger" plain @click="clearLibrary">清空知识库</el-button>
       </div>
+      <div class="filter-row ai-actions">
+        <span>AI 分类</span>
+        <el-button size="large" plain :loading="aiOrganizingPending" @click="organizeSelected">分类所选帖子</el-button>
+        <el-button size="large" type="primary" plain :loading="aiOrganizingPending" @click="organizePending">分类全部待分类帖子</el-button>
+        <span v-if="aiTask" class="ai-progress">{{ aiTaskText(aiTask) }}</span>
+      </div>
     </section>
 
     <el-alert v-if="listError" :title="listError" type="error" show-icon :closable="false">
@@ -591,10 +652,12 @@ function replaceItem(updated: KnowledgeItem) {
             v-for="item in items"
             :key="item.id"
             :item="item"
+            :selected="selectedIds.includes(item.id)"
             :category-name="item.categoryId ? categoryNames[item.categoryId] || null : null"
             :tag-names="tagNames"
             @open="openItem"
             @filter-tag="filterByTag"
+            @toggle-select="toggleSelect"
           />
           <el-empty v-if="!listLoading && !items.length && !listError" :description="emptyDescription" />
         </section>
@@ -653,6 +716,7 @@ function replaceItem(updated: KnowledgeItem) {
       :saving="settingsSaving"
       :testing-ai="aiTesting"
       :organizing-pending="aiOrganizingPending"
+      :ai-task="aiTask"
       @reload="loadSettings"
       @save-ai="saveAiSettings"
       @test-ai="testAi"

@@ -6,10 +6,12 @@ defineProps<{
   item: KnowledgeItem
   categoryName: string | null
   tagNames: Record<string, string>
+  selected?: boolean
 }>()
 defineEmits<{
   open: [item: KnowledgeItem]
   filterTag: [tagId: string]
+  toggleSelect: [item: KnowledgeItem]
 }>()
 
 function formatDate(value: string) {
@@ -38,6 +40,10 @@ function sourceLabel(item: KnowledgeItem) {
 <template>
   <article class="knowledge-card" tabindex="0" @click="$emit('open', item)" @keyup.enter="$emit('open', item)">
     <div class="card-body">
+      <label class="card-select" @click.stop>
+        <input type="checkbox" :checked="selected" @change="$emit('toggleSelect', item)" />
+        <span>选择</span>
+      </label>
       <div class="card-meta">
         <span>{{ item.author || '未知作者' }}</span>
         <span><el-icon><Calendar /></el-icon>{{ formatDate(item.updatedAt) }}</span>
