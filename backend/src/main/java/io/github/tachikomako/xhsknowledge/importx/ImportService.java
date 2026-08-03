@@ -1,7 +1,6 @@
 package io.github.tachikomako.xhsknowledge.importx;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import io.github.tachikomako.xhsknowledge.ai.AiOrganizationService;
 import io.github.tachikomako.xhsknowledge.common.ApiException;
 import io.github.tachikomako.xhsknowledge.item.KnowledgeItemEntity;
 import io.github.tachikomako.xhsknowledge.item.KnowledgeItemMapper;
@@ -9,8 +8,6 @@ import io.github.tachikomako.xhsknowledge.source.XiaohongshuUrlNormalizer;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.net.URI;
@@ -32,20 +29,17 @@ public class ImportService {
     private final KnowledgeItemMapper itemMapper;
     private final ImportBatchMapper batchMapper;
     private final XiaohongshuUrlNormalizer urlNormalizer;
-    private final AiOrganizationService aiOrganizationService;
     private final JdbcTemplate jdbcTemplate;
 
     public ImportService(
             KnowledgeItemMapper itemMapper,
             ImportBatchMapper batchMapper,
             XiaohongshuUrlNormalizer urlNormalizer,
-            AiOrganizationService aiOrganizationService,
             JdbcTemplate jdbcTemplate
     ) {
         this.itemMapper = itemMapper;
         this.batchMapper = batchMapper;
         this.urlNormalizer = urlNormalizer;
-        this.aiOrganizationService = aiOrganizationService;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -62,7 +56,6 @@ public class ImportService {
         int updated = 0;
         int skipped = 0;
         int failed = 0;
-        List<String> aiItemIds = new ArrayList<>();
 
         for (int index = 0; index < request.items().size(); index++) {
             XiaohongshuImportRequest.IncomingItem incoming = request.items().get(index);
@@ -74,11 +67,9 @@ public class ImportService {
                 switch (result.status()) {
                     case "CREATED" -> {
                         created++;
-                        aiItemIds.add(result.itemId());
                     }
                     case "UPDATED" -> {
                         updated++;
-                        aiItemIds.add(result.itemId());
                     }
                     default -> skipped++;
                 }
@@ -107,7 +98,6 @@ public class ImportService {
         batch.setFailedCount(failed);
         batch.setCreatedAt(now());
         batchMapper.insert(batch);
-        scheduleAi(aiItemIds);
 
         return new ImportResponse(
                 batchId,
@@ -119,16 +109,6 @@ public class ImportService {
                 failed,
                 List.copyOf(results)
         );
-    }
-
-    private void scheduleAi(List<String> itemIds) {
-        if (itemIds.isEmpty()) return;
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                itemIds.forEach(aiOrganizationService::organizeLater);
-            }
-        });
     }
 
     private ImportResponse.ItemResult upsert(

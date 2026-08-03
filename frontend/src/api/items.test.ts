@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { clearItems, deleteItem, organizeItem, organizePendingAi, searchItems, updateItem } from './items'
+import {
+  clearItems,
+  deleteItem,
+  getAiTask,
+  organizeItem,
+  organizePendingAi,
+  organizeSelectedAi,
+  searchItems,
+  updateItem,
+} from './items'
 
 describe('knowledge item API', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -33,12 +42,12 @@ describe('knowledge item API', () => {
       .mockResolvedValueOnce({ ok: true, status: 204 })
     vi.stubGlobal('fetch', fetchMock)
 
-    await updateItem('item/1', { summary: '摘要', userNote: null })
+    await updateItem('item/1', { summary: 'summary', userNote: null })
     await deleteItem('item/1')
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/items/item%2F1', expect.objectContaining({
       method: 'PATCH',
-      body: JSON.stringify({ summary: '摘要', userNote: null }),
+      body: JSON.stringify({ summary: 'summary', userNote: null }),
     }))
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/items/item%2F1', expect.objectContaining({
       method: 'DELETE',
@@ -62,7 +71,7 @@ describe('knowledge item API', () => {
   it('sends manual AI organization requests', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'item/1', aiStatus: 'COMPLETED' }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ processed: 1, succeeded: 1, failed: 0, skipped: 0, errors: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'task-1', status: 'QUEUED', total: 1 }) })
     vi.stubGlobal('fetch', fetchMock)
 
     await organizeItem('item/1')
@@ -73,30 +82,32 @@ describe('knowledge item API', () => {
     }))
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/ai/organize-pending', expect.objectContaining({
       method: 'POST',
-      signal: expect.any(AbortSignal),
     }))
   })
 
-  it('times out pending AI organization requests', async () => {
-    vi.useFakeTimers()
-    vi.stubGlobal('fetch', vi.fn((_url, options: RequestInit) => new Promise((_resolve, reject) => {
-      options.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
-    })))
+  it('creates selected AI tasks and polls task progress', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'task-1', status: 'QUEUED' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'task-1', status: 'COMPLETED', processed: 2 }) })
+    vi.stubGlobal('fetch', fetchMock)
 
-    const assertion = expect(organizePendingAi()).rejects.toThrow('AI 批量整理超时')
-    await vi.advanceTimersByTimeAsync(120_000)
-    await assertion
-    vi.useRealTimers()
+    await organizeSelectedAi(['item/1', 'item/2'])
+    await getAiTask('task-1')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/ai/organize-tasks', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ itemIds: ['item/1', 'item/2'] }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/ai/organize-tasks/task-1', expect.any(Object))
   })
 
   it('uses the backend error message when available', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,
       status: 400,
-      json: async () => ({ message: '查询参数无效' }),
+      json: async () => ({ message: 'invalid query' }),
     }))
 
-    await expect(searchItems()).rejects.toThrow('查询参数无效')
+    await expect(searchItems()).rejects.toThrow('invalid query')
   })
-
 })

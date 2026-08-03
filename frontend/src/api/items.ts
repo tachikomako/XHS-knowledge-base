@@ -70,6 +70,17 @@ export interface AiOrganizeBatchResponse {
   message: string | null
 }
 
+export interface AiOrganizeTask {
+  id: string | null
+  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'REJECTED'
+  total: number
+  processed: number
+  succeeded: number
+  failed: number
+  errors: string[]
+  message: string | null
+}
+
 export async function searchItems(
   params: ItemSearchParams = {},
   signal?: AbortSignal,
@@ -104,13 +115,20 @@ export function organizeItem(id: string): Promise<KnowledgeItem> {
   return requestJson(`/api/v1/items/${encodeURIComponent(id)}/organize`, { method: 'POST' })
 }
 
-export function organizePendingAi(): Promise<AiOrganizeBatchResponse> {
-  const controller = new AbortController()
-  const timeoutId = globalThis.setTimeout(() => controller.abort(), 120_000)
-  return requestJson<AiOrganizeBatchResponse>('/api/v1/ai/organize-pending', {
+export function organizePendingAi(): Promise<AiOrganizeTask> {
+  return requestJson<AiOrganizeTask>('/api/v1/ai/organize-pending', { method: 'POST' })
+}
+
+export function organizeSelectedAi(itemIds: string[]): Promise<AiOrganizeTask> {
+  return requestJson<AiOrganizeTask>('/api/v1/ai/organize-tasks', {
     method: 'POST',
-    signal: controller.signal,
-  }).finally(() => globalThis.clearTimeout(timeoutId))
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ itemIds }),
+  })
+}
+
+export function getAiTask(id: string, signal?: AbortSignal): Promise<AiOrganizeTask> {
+  return requestJson<AiOrganizeTask>(`/api/v1/ai/organize-tasks/${encodeURIComponent(id)}`, { signal })
 }
 
 export async function deleteItem(id: string): Promise<void> {

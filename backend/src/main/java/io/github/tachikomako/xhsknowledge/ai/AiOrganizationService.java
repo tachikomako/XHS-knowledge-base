@@ -8,25 +8,37 @@ import io.github.tachikomako.xhsknowledge.item.KnowledgeItemMapper;
 import io.github.tachikomako.xhsknowledge.settings.SettingsService;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClientException;
 
+import jakarta.annotation.PreDestroy;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Map;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Service
 public class AiOrganizationService {
+    private static final int TASK_BATCH_SIZE = 15;
+
     private final KnowledgeItemMapper itemMapper;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final SettingsService settingsService;
     private final QwenClient qwenClient;
     private final AiEligibilityService aiEligibilityService;
+    private final ExecutorService taskExecutor = Executors.newSingleThreadExecutor();
+    private final Map<String, AiTaskState> tasks = new ConcurrentHashMap<>();
 
     public AiOrganizationService(
             KnowledgeItemMapper itemMapper,
@@ -44,17 +56,6 @@ public class AiOrganizationService {
         this.aiEligibilityService = aiEligibilityService;
     }
 
-    @Async
-    public void organizeLater(String itemId) {
-        if (!settingsService.aiEnabled() || !qwenClient.configured()) return;
-        try {
-            markProcessing(itemId);
-            organizeNow(itemId);
-        } catch (Exception exception) {
-            markFailed(itemId, exception);
-        }
-    }
-
     public void organizeManually(String itemId) {
         if (!qwenClient.configured()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "AI_NOT_CONFIGURED", "Qwen API key is not configured");
@@ -63,6 +64,7 @@ public class AiOrganizationService {
             markProcessing(itemId);
             organizeNow(itemId);
         } catch (ApiException exception) {
+            markFailed(itemId, exception);
             throw exception;
         } catch (Exception exception) {
             markFailed(itemId, exception);
@@ -109,19 +111,57 @@ public class AiOrganizationService {
         );
     }
 
+    public AiOrganizeTaskView startPendingTask() {
+        if (!settingsService.aiEnabled()) return rejectedTask("AI 整理尚未开启");
+        if (!qwenClient.configured()) return rejectedTask("请先在设置中配置并测试 Qwen API");
+        List<String> itemIds = aiEligibilityService.eligibleItemIds(300);
+        if (itemIds.isEmpty()) return rejectedTask(noEligibleMessage(aiEligibilityService.stats()));
+        return startTask(itemIds);
+    }
+
+    public AiOrganizeTaskView startTask(List<String> requestedItemIds) {
+        if (!settingsService.aiEnabled()) return rejectedTask("AI 整理尚未开启");
+        if (!qwenClient.configured()) return rejectedTask("请先在设置中配置并测试 Qwen API");
+        List<String> itemIds = eligibleRequestedIds(requestedItemIds);
+        if (itemIds.isEmpty()) return rejectedTask("没有可整理内容");
+
+        AiTaskState state = new AiTaskState(UUID.randomUUID().toString(), itemIds.size());
+        tasks.put(state.id, state);
+        taskExecutor.submit(() -> runTask(state, itemIds));
+        return state.view();
+    }
+
+    public AiOrganizeTaskView task(String id) {
+        AiTaskState state = tasks.get(id);
+        if (state == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "AI_TASK_NOT_FOUND", "AI task not found");
+        }
+        return state.view();
+    }
+
+    @PreDestroy
+    void shutdown() {
+        taskExecutor.shutdownNow();
+    }
+
     @Transactional
     public void organizeNow(String itemId) throws Exception {
         KnowledgeItemEntity item = itemMapper.selectById(itemId);
         if (item == null || Integer.valueOf(1).equals(item.getManualMetadataLocked())) return;
         QwenAiResult result = qwenClient.organize(prompt(item));
+        validateResult(result);
         item = itemMapper.selectById(itemId);
         if (item == null || Integer.valueOf(1).equals(item.getManualMetadataLocked())) return;
 
         Set<String> categoryIds = Set.copyOf(jdbcTemplate.queryForList("SELECT id FROM categories", String.class));
         Set<String> tagIds = Set.copyOf(jdbcTemplate.queryForList("SELECT id FROM tags", String.class));
-        String categoryId = StringUtils.hasText(result.categoryId()) && categoryIds.contains(result.categoryId())
-                ? result.categoryId()
-                : null;
+        String categoryId = null;
+        if (StringUtils.hasText(result.categoryId())) {
+            if (!categoryIds.contains(result.categoryId())) {
+                throw new ApiException(HttpStatus.BAD_GATEWAY, "AI_CATEGORY_NOT_FOUND", "分类 ID 不存在");
+            }
+            categoryId = result.categoryId();
+        }
         List<String> validTagIds = result.tagIds() == null ? List.of() : result.tagIds().stream()
                 .filter(tagIds::contains)
                 .distinct()
@@ -129,7 +169,7 @@ public class AiOrganizationService {
                 .toList();
 
         String timestamp = now();
-        item.setSummary(limit(result.summary(), 500));
+        item.setSummary(StringUtils.hasText(item.getContent()) ? limit(result.summary(), 500) : item.getSummary());
         item.setCategoryId(categoryId);
         item.setAiConfidence(Math.max(0, Math.min(1, result.confidence())));
         item.setAiStatus("COMPLETED");
@@ -144,7 +184,7 @@ public class AiOrganizationService {
         jdbcTemplate.update("""
                 UPDATE knowledge_items
                 SET ai_status = 'PROCESSING', ai_last_error = NULL, updated_at = ?
-                WHERE id = ? AND manual_metadata_locked = 0
+                WHERE id = ? AND manual_metadata_locked = 0 AND ai_status IN ('PENDING', 'FAILED')
                 """, now(), itemId);
     }
 
@@ -153,7 +193,82 @@ public class AiOrganizationService {
                 UPDATE knowledge_items
                 SET ai_status = 'FAILED', ai_last_error = ?, updated_at = ?
                 WHERE id = ? AND manual_metadata_locked = 0
-                """, limit(exception.getMessage(), 200), now(), itemId);
+                """, safeAiError(exception), now(), itemId);
+    }
+
+    private void runTask(AiTaskState state, List<String> itemIds) {
+        state.status = "RUNNING";
+        for (int start = 0; start < itemIds.size(); start += TASK_BATCH_SIZE) {
+            for (String itemId : itemIds.subList(start, Math.min(start + TASK_BATCH_SIZE, itemIds.size()))) {
+                try {
+                    markProcessing(itemId);
+                    organizeNow(itemId);
+                    state.succeeded++;
+                } catch (Exception exception) {
+                    state.failed++;
+                    markFailed(itemId, exception);
+                    state.errors.add("%s: %s".formatted(itemId, safeAiError(exception)));
+                } finally {
+                    state.processed++;
+                }
+            }
+        }
+        state.status = state.failed > 0 ? "COMPLETED_WITH_ERRORS" : "COMPLETED";
+        state.message = "正在分类：%d / %d，成功：%d，失败：%d".formatted(
+                state.processed, state.total, state.succeeded, state.failed
+        );
+    }
+
+    private List<String> eligibleRequestedIds(List<String> requestedItemIds) {
+        if (requestedItemIds == null || requestedItemIds.isEmpty()) return List.of();
+        List<String> ids = requestedItemIds.stream()
+                .filter(StringUtils::hasText)
+                .distinct()
+                .limit(300)
+                .toList();
+        if (ids.isEmpty()) return List.of();
+        String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
+        return jdbcTemplate.queryForList("""
+                SELECT id
+                FROM knowledge_items
+                WHERE lifecycle_status = 'ACTIVE'
+                  AND trim(title) <> ''
+                  AND manual_metadata_locked = 0
+                  AND ai_status IN ('PENDING', 'FAILED')
+                  AND id IN (%s)
+                """.formatted(placeholders), String.class, ids.toArray());
+    }
+
+    private AiOrganizeTaskView rejectedTask(String message) {
+        return new AiOrganizeTaskView(null, "REJECTED", 0, 0, 0, 0, List.of(), message);
+    }
+
+    private void validateResult(QwenAiResult result) {
+        if (result == null) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "AI_RESPONSE_PARSE_FAILED", "响应解析失败");
+        }
+    }
+
+    private String safeAiError(Exception exception) {
+        if (exception instanceof ApiException apiException) {
+            return switch (apiException.getCode()) {
+                case "AI_CATEGORY_NOT_FOUND" -> "分类 ID 不存在";
+                case "AI_RESPONSE_PARSE_FAILED" -> "响应解析失败";
+                default -> safeError(exception);
+            };
+        }
+        String name = exception.getClass().getSimpleName().toLowerCase();
+        String message = exception.getMessage() == null ? "" : exception.getMessage().toLowerCase();
+        if (name.contains("timeout") || message.contains("timeout") || message.contains("timed out")) {
+            return "Qwen 请求超时";
+        }
+        if (exception instanceof JsonProcessingException) {
+            return "响应解析失败";
+        }
+        if (exception instanceof RestClientException) {
+            return "Qwen 请求失败";
+        }
+        return safeError(exception);
     }
 
     private AiOrganizeBatchResponse batchResponse(
@@ -275,6 +390,26 @@ public class AiOrganizationService {
 
     private String now() {
         return OffsetDateTime.now(ZoneOffset.UTC).toString();
+    }
+
+    private static final class AiTaskState {
+        private final String id;
+        private final int total;
+        private final List<String> errors = Collections.synchronizedList(new ArrayList<>());
+        private volatile String status = "QUEUED";
+        private volatile int processed;
+        private volatile int succeeded;
+        private volatile int failed;
+        private volatile String message = "任务已创建";
+
+        private AiTaskState(String id, int total) {
+            this.id = id;
+            this.total = total;
+        }
+
+        private AiOrganizeTaskView view() {
+            return new AiOrganizeTaskView(id, status, total, processed, succeeded, failed, List.copyOf(errors), message);
+        }
     }
 
 }
