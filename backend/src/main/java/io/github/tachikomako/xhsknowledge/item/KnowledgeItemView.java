@@ -13,6 +13,7 @@ public record KnowledgeItemView(
         String contentStatus,
         String contentLastError,
         List<String> sourceTags,
+        List<String> sourceRelations,
         String author,
         String captureLevel,
         String summary,

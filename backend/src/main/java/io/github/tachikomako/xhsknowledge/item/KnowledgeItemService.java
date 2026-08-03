@@ -22,6 +22,7 @@ public class KnowledgeItemService {
     private static final Set<String> CAPTURE_LEVELS = Set.of("CARD", "DETAIL");
     private static final Set<String> AI_STATUSES = Set.of("PENDING", "PROCESSING", "COMPLETED", "FAILED");
     private static final Set<String> CONTENT_STATUSES = Set.of("DISCOVERED", "FETCHING", "COMPLETED", "FAILED");
+    private static final Set<String> SOURCE_SCOPES = Set.of("ALL", "FAVORITE", "LIKED", "BOTH");
 
     private final KnowledgeItemMapper itemMapper;
     private final JdbcTemplate jdbcTemplate;
@@ -39,6 +40,7 @@ public class KnowledgeItemService {
             String categoryId,
             String tagId,
             String sourceType,
+            String sourceScope,
             String captureLevel,
             String aiStatus,
             String contentStatus,
@@ -52,6 +54,7 @@ public class KnowledgeItemService {
         validateOptional(captureLevel, CAPTURE_LEVELS, "captureLevel");
         validateOptional(aiStatus, AI_STATUSES, "aiStatus");
         validateOptional(contentStatus, CONTENT_STATUSES, "contentStatus");
+        validateOptional(sourceScope, SOURCE_SCOPES, "sourceScope");
         if (StringUtils.hasText(query) && query.length() > 200) {
             throw badRequest("QUERY_TOO_LONG", "q must not exceed 200 characters");
         }
@@ -79,6 +82,7 @@ public class KnowledgeItemService {
             );
         }
         wrapper.eq(StringUtils.hasText(sourceType), KnowledgeItemEntity::getSourceType, sourceType);
+        applySourceScope(wrapper, sourceScope);
         wrapper.eq(StringUtils.hasText(captureLevel), KnowledgeItemEntity::getCaptureLevel, captureLevel);
         wrapper.eq(StringUtils.hasText(aiStatus), KnowledgeItemEntity::getAiStatus, aiStatus);
         wrapper.eq(StringUtils.hasText(contentStatus), KnowledgeItemEntity::getContentStatus, contentStatus);
@@ -233,6 +237,14 @@ public class KnowledgeItemService {
         );
     }
 
+    private List<String> findSourceRelations(String itemId) {
+        return jdbcTemplate.queryForList(
+                "SELECT source FROM item_source_relations WHERE item_id = ? ORDER BY source",
+                String.class,
+                itemId
+        );
+    }
+
     private KnowledgeItemView toView(KnowledgeItemEntity item) {
         return new KnowledgeItemView(
                 item.getId(),
@@ -245,6 +257,7 @@ public class KnowledgeItemService {
                 item.getContentStatus(),
                 item.getContentLastError(),
                 findSourceTags(item.getId()),
+                findSourceRelations(item.getId()),
                 item.getAuthor(),
                 item.getCaptureLevel(),
                 item.getSummary(),
@@ -272,6 +285,19 @@ public class KnowledgeItemService {
             case "updatedAt,desc" -> wrapper.orderByDesc(KnowledgeItemEntity::getUpdatedAt);
             default -> throw badRequest("INVALID_SORT", "sort must use createdAt or updatedAt with asc/desc");
         }
+    }
+
+    private void applySourceScope(LambdaQueryWrapper<KnowledgeItemEntity> wrapper, String sourceScope) {
+        if (!StringUtils.hasText(sourceScope) || "ALL".equals(sourceScope)) return;
+        if ("BOTH".equals(sourceScope)) {
+            wrapper.apply("EXISTS (SELECT 1 FROM item_source_relations isr WHERE isr.item_id = knowledge_items.id AND isr.source = 'FAVORITE')");
+            wrapper.apply("EXISTS (SELECT 1 FROM item_source_relations isr WHERE isr.item_id = knowledge_items.id AND isr.source = 'LIKED')");
+            return;
+        }
+        wrapper.apply(
+                "EXISTS (SELECT 1 FROM item_source_relations isr WHERE isr.item_id = knowledge_items.id AND isr.source = {0})",
+                sourceScope
+        );
     }
 
     private void validateOptional(String value, Set<String> allowed, String field) {

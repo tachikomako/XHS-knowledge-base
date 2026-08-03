@@ -39,7 +39,7 @@ const queryInput = ref('')
 const appliedQuery = ref('')
 const categoryId = ref('')
 const tagId = ref('')
-const sourceType = ref('')
+const sourceScope = ref<'ALL' | 'FAVORITE' | 'LIKED' | 'BOTH'>('ALL')
 const listLoading = ref(false)
 const listError = ref('')
 const drawerVisible = ref(false)
@@ -107,7 +107,7 @@ onBeforeUnmount(() => {
   settingsController?.abort()
 })
 
-watch([categoryId, tagId, sourceType], () => {
+watch([categoryId, tagId, sourceScope], () => {
   page.value = 1
   void loadItems()
 })
@@ -123,7 +123,7 @@ async function loadItems() {
       q: appliedQuery.value,
       categoryId: categoryId.value,
       tagId: tagId.value,
-      sourceType: sourceType.value,
+      sourceScope: sourceScope.value,
       page: page.value,
       pageSize: PAGE_SIZE,
     }, controller.signal)
@@ -546,10 +546,6 @@ function replaceItem(updated: KnowledgeItem) {
         <el-button native-type="submit" size="large" type="primary">搜索</el-button>
       </form>
       <div class="filter-row">
-        <el-select v-model="sourceType" size="large" aria-label="来源筛选" style="width: 150px">
-          <el-option label="全部来源" value="" />
-          <el-option label="小红书" value="XIAOHONGSHU" />
-        </el-select>
         <el-select v-model="tagId" clearable filterable size="large" placeholder="全部标签" aria-label="标签筛选" style="width: 160px">
           <el-option v-for="tag in tags" :key="tag.id" :label="`#${tag.name}`" :value="tag.id" />
         </el-select>
@@ -564,6 +560,12 @@ function replaceItem(updated: KnowledgeItem) {
 
     <section class="library-body">
       <aside class="category-sidebar" aria-label="分类树">
+        <div class="source-scope-nav">
+          <button type="button" :class="{ active: sourceScope === 'ALL' }" @click="sourceScope = 'ALL'">全部</button>
+          <button type="button" :class="{ active: sourceScope === 'FAVORITE' }" @click="sourceScope = 'FAVORITE'">收藏</button>
+          <button type="button" :class="{ active: sourceScope === 'LIKED' }" @click="sourceScope = 'LIKED'">点赞</button>
+          <button type="button" :class="{ active: sourceScope === 'BOTH' }" @click="sourceScope = 'BOTH'">收藏 + 点赞</button>
+        </div>
         <button type="button" :class="{ active: !categoryId }" @click="selectCategory('')">所有</button>
         <button type="button" :class="{ active: categoryId === '__pending__' }" @click="selectCategory('__pending__')">待整理</button>
         <div v-for="category in categoryTree" :key="category.id" class="category-branch">

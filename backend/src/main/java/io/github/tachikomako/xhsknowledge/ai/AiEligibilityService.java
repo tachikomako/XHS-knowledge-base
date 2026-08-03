@@ -19,7 +19,7 @@ public class AiEligibilityService {
                 SELECT id
                 FROM knowledge_items
                 WHERE lifecycle_status = 'ACTIVE'
-                  AND content_status = 'COMPLETED'
+                  AND trim(title) <> ''
                   AND manual_metadata_locked = 0
                   AND ai_status IN ('PENDING', 'FAILED')
                 ORDER BY updated_at DESC
@@ -30,7 +30,7 @@ public class AiEligibilityService {
     public int eligibleCount() {
         return count("""
                 lifecycle_status = 'ACTIVE'
-                AND content_status = 'COMPLETED'
+                AND trim(title) <> ''
                 AND manual_metadata_locked = 0
                 AND ai_status IN ('PENDING', 'FAILED')
                 """);
@@ -40,13 +40,13 @@ public class AiEligibilityService {
         int eligible = eligibleCount();
         int blockedByContent = count("""
                 lifecycle_status = 'ACTIVE'
-                AND content_status <> 'COMPLETED'
+                AND (title IS NULL OR trim(title) = '')
                 AND manual_metadata_locked = 0
                 AND ai_status IN ('PENDING', 'FAILED')
                 """);
         int blockedByManualLock = count("""
                 lifecycle_status = 'ACTIVE'
-                AND content_status = 'COMPLETED'
+                AND trim(title) <> ''
                 AND manual_metadata_locked = 1
                 AND ai_status IN ('PENDING', 'FAILED')
                 """);

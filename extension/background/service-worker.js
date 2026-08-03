@@ -10,12 +10,12 @@ import { collectAccessContextsFromPageState } from '../content/access-context.js
 const DEFAULT_SETTINGS = Object.freeze({
   backendUrl: 'http://127.0.0.1:8080',
   knowledgeBaseUrl: 'http://127.0.0.1:5173',
-  extensionToken: '',
+  extensionToken: 'dev-local-token',
 })
 
 chrome.runtime.onInstalled.addListener(async () => {
   const saved = await chrome.storage.local.get(Object.keys(DEFAULT_SETTINGS))
-  await chrome.storage.local.set({ ...DEFAULT_SETTINGS, ...saved })
+  await chrome.storage.local.set(withDefaultToken({ ...DEFAULT_SETTINGS, ...saved }))
 })
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -78,7 +78,7 @@ async function importItems(payload) {
 
   const settings = await chrome.storage.local.get(Object.keys(DEFAULT_SETTINGS))
   const backendUrl = normalizeBaseUrl(settings.backendUrl || DEFAULT_SETTINGS.backendUrl)
-  const extensionToken = String(settings.extensionToken || '').trim()
+  const extensionToken = String(settings.extensionToken || DEFAULT_SETTINGS.extensionToken).trim()
   if (!extensionToken) {
     throw new Error('请先在设置中填写与后端一致的本地访问令牌')
   }
@@ -111,7 +111,7 @@ async function startManualSync(payload) {
 
   const settings = await chrome.storage.local.get(Object.keys(DEFAULT_SETTINGS))
   const backendUrl = normalizeBaseUrl(settings.backendUrl || DEFAULT_SETTINGS.backendUrl)
-  const extensionToken = String(settings.extensionToken || '').trim()
+  const extensionToken = String(settings.extensionToken || DEFAULT_SETTINGS.extensionToken).trim()
   if (!extensionToken) throw new Error('请先在设置中填写与后端一致的本地访问令牌')
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
@@ -120,9 +120,11 @@ async function startManualSync(payload) {
   const syncRun = await createSyncRun(backendUrl, extensionToken, requestedSources)
   const summary = createImportSummary()
   const errors = []
+  const completeFavoriteContent = requestedSources.includes('FAVORITE') && Boolean(payload?.completeFavoriteContent)
   const diagnostics = {
     build: payload?.extensionBuild || 'unknown',
     started: 1,
+    contentRequested: completeFavoriteContent,
     cardsImported: 0,
     contentCandidates: 0,
     detailPagesOpened: 0,
@@ -160,35 +162,37 @@ async function startManualSync(payload) {
       mergeImportResult(summary, imported.result)
       diagnostics.cardsImported = summary.received
 
-      const completedBeforeSource = contentCompleted
-      const failedBeforeSource = contentFailed
-      const completion = await completeMissingContent(tab.id, items, imported.result, discovery.extractorVersion, {
-        onProgress: async (progress) => {
-          try {
-            Object.assign(diagnostics, progress.diagnostics)
-            await updateSyncRun(backendUrl, extensionToken, syncRun.id, {
-              status: 'RUNNING',
-              discoveredCount,
-              processedCount: summary.received,
-              createdCount: summary.created,
-              updatedCount: summary.updated,
-              unchangedCount: summary.skipped,
-              contentCompletedCount: completedBeforeSource + progress.completed,
-              contentFailedCount: failedBeforeSource + progress.failed,
-              aiCompletedCount: 0,
-              aiFailedCount: 0,
-              errorSummary: syncDiagnostics(diagnostics, [...errors, ...progress.errors]),
-            })
-          } catch (error) {
-            errors.push(`${sourceLabel(source)}正文进度回写失败：${summarizeContentFailure(error)}`)
-          }
-        },
-      })
-      Object.assign(diagnostics, completion.diagnostics)
-      contentCompleted += completion.completed
-      contentFailed += completion.failed
-      diagnostics.contentFailed = contentFailed
-      for (const error of completion.errors) errors.push(`${sourceLabel(source)}正文：${error}`)
+      if (source === 'FAVORITE' && completeFavoriteContent) {
+        const completedBeforeSource = contentCompleted
+        const failedBeforeSource = contentFailed
+        const completion = await completeMissingContent(tab.id, items, imported.result, discovery.extractorVersion, {
+          onProgress: async (progress) => {
+            try {
+              Object.assign(diagnostics, progress.diagnostics)
+              await updateSyncRun(backendUrl, extensionToken, syncRun.id, {
+                status: 'RUNNING',
+                discoveredCount,
+                processedCount: summary.received,
+                createdCount: summary.created,
+                updatedCount: summary.updated,
+                unchangedCount: summary.skipped,
+                contentCompletedCount: completedBeforeSource + progress.completed,
+                contentFailedCount: failedBeforeSource + progress.failed,
+                aiCompletedCount: 0,
+                aiFailedCount: 0,
+                errorSummary: syncDiagnostics(diagnostics, [...errors, ...progress.errors]),
+              })
+            } catch (error) {
+              errors.push(`${sourceLabel(source)}正文进度回写失败：${summarizeContentFailure(error)}`)
+            }
+          },
+        })
+        Object.assign(diagnostics, completion.diagnostics)
+        contentCompleted += completion.completed
+        contentFailed += completion.failed
+        diagnostics.contentFailed = contentFailed
+        for (const error of completion.errors) errors.push(`${sourceLabel(source)}正文：${error}`)
+      }
       for (const warning of discovery.warnings || []) errors.push(`${sourceLabel(source)}：${warning}`)
     } catch (error) {
       errors.push(`${sourceLabel(source)}：${summarizeContentFailure(error)}`)
@@ -216,7 +220,8 @@ async function startManualSync(payload) {
   })
   summary.contentCompleted = contentCompleted
   summary.contentFailed = contentFailed
-  return { ok: status !== 'FAILED', result: summary, syncRun: updated, errors }
+  summary.contentRequested = completeFavoriteContent
+  return { ok: status !== 'FAILED', result: summary, syncRun: updated, errors, contentRequested: completeFavoriteContent }
 }
 
 async function completeMissingContent(tabId, discoveredItems, importResult, extractorVersion, options = {}) {
@@ -345,6 +350,13 @@ function normalizeBaseUrl(value) {
   return String(value).trim().replace(/\/+$/, '')
 }
 
+function withDefaultToken(settings) {
+  return {
+    ...settings,
+    extensionToken: String(settings.extensionToken || '').trim() || DEFAULT_SETTINGS.extensionToken,
+  }
+}
+
 function normalizeSources(value) {
   const sources = Array.isArray(value) ? value : []
   return [...new Set(sources.filter((source) => ['FAVORITE', 'LIKED'].includes(source)))]
@@ -416,6 +428,7 @@ function syncDiagnostics(diagnostics, errors = []) {
   const parts = [
     `build=${diagnostics.build}`,
     'manual sync started',
+    `content requested: ${diagnostics.contentRequested ? 'yes' : 'no'}`,
     `cards imported: ${diagnostics.cardsImported || 0}`,
     `content candidates: ${diagnostics.contentCandidates || 0}`,
     `detail pages opened: ${diagnostics.detailPagesOpened || 0}`,

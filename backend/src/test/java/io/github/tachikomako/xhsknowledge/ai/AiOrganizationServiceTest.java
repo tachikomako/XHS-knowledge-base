@@ -231,10 +231,10 @@ class AiOrganizationServiceTest {
         insertItem("completed-processing", "COMPLETED", "PROCESSING", 0);
         insertItem("completed-locked", "COMPLETED", "PENDING", 1);
 
-        assertThat(aiEligibilityService.eligibleCount()).isEqualTo(2);
+        assertThat(aiEligibilityService.eligibleCount()).isEqualTo(3);
         assertThat(aiEligibilityService.eligibleItemIds(50))
-                .containsExactlyInAnyOrder("completed-pending", "completed-failed")
-                .doesNotContain("discovered-pending", "completed-processing", "completed-locked");
+                .containsExactlyInAnyOrder("discovered-pending", "completed-pending", "completed-failed")
+                .doesNotContain("completed-processing", "completed-locked");
     }
 
     @Test
@@ -265,16 +265,17 @@ class AiOrganizationServiceTest {
     @Test
     void explainsWhyThereAreNoEligibleItems() throws Exception {
         enableAi();
-        insertItem("discovered-pending", "DISCOVERED", "PENDING", 0);
+        insertItem("blank-title", "DISCOVERED", "PENDING", 0);
+        jdbcTemplate.update("UPDATE knowledge_items SET title = '' WHERE id = ?", "blank-title");
         when(qwenClient.configured()).thenReturn(true);
 
         mockMvc.perform(post("/api/v1/ai/organize-pending"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.eligible").value(0))
                 .andExpect(jsonPath("$.blockedByContent").value(1))
-                .andExpect(jsonPath("$.message").value("没有可整理内容，请先完成正文同步"));
+                .andExpect(jsonPath("$.message").value("没有可整理内容，条目需要至少包含标题"));
 
-        jdbcTemplate.update("UPDATE knowledge_items SET content_status = 'COMPLETED', manual_metadata_locked = 1 WHERE id = ?", "discovered-pending");
+        jdbcTemplate.update("UPDATE knowledge_items SET title = 'locked item', manual_metadata_locked = 1 WHERE id = ?", "blank-title");
 
         mockMvc.perform(post("/api/v1/ai/organize-pending"))
                 .andExpect(status().isOk())

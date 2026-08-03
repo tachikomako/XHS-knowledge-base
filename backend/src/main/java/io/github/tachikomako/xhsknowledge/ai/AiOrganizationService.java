@@ -197,7 +197,7 @@ public class AiOrganizationService {
 
     private String noEligibleMessage(AiEligibilityService.AiEligibilityStats stats) {
         if (stats.blockedByContent() > 0) {
-            return "没有可整理内容，请先完成正文同步";
+            return "没有可整理内容，条目需要至少包含标题";
         }
         if (stats.blockedByManualLock() > 0) {
             return "待处理内容已被用户手动锁定";
@@ -209,7 +209,7 @@ public class AiOrganizationService {
         return """
                 请整理下面的小红书收藏，返回 JSON：
                 {"summary":"两三句话的简短摘要","categoryId":"existing-category-id","tagIds":["existing-tag-id"],"suggestedTags":["新标签建议"],"confidence":0.86}
-                只能选择已有分类和已有标签；没有合适分类或标签时用 null 或空数组。
+                只能选择已有分类和已有标签；没有合适分类或标签时用 null 或空数组。正文未采集时，只能根据标题、作者和来源标签判断，不要编造正文细节。
 
                 已有分类：
                 %s
@@ -220,18 +220,28 @@ public class AiOrganizationService {
                 收藏内容：
                 标题：%s
                 作者：%s
+                来源标签：%s
                 正文：%s
                 """.formatted(
                 objectMapper.writeValueAsString(catalog("categories")),
                 objectMapper.writeValueAsString(catalog("tags")),
                 item.getTitle(),
                 item.getAuthor(),
-                limit(item.getContent(), 4000)
+                objectMapper.writeValueAsString(sourceTags(item.getId())),
+                StringUtils.hasText(item.getContent()) ? limit(item.getContent(), 4000) : "(content not captured)"
         );
     }
 
     private List<?> catalog(String table) {
         return jdbcTemplate.queryForList("SELECT id, name FROM " + table + " ORDER BY lower(name)");
+    }
+
+    private List<String> sourceTags(String itemId) {
+        return jdbcTemplate.queryForList(
+                "SELECT value FROM knowledge_item_source_tags WHERE item_id = ? ORDER BY lower(value)",
+                String.class,
+                itemId
+        );
     }
 
     private void replaceTags(String itemId, List<String> tagIds) {

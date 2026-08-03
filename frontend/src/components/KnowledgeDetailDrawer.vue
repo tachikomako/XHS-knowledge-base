@@ -77,12 +77,21 @@ function aiStatusLabel(status: string) {
 }
 
 function aiReviewHint(item: KnowledgeItem) {
-  if (item.contentStatus !== 'COMPLETED') return '正文待补全，暂不可 AI 整理'
   if (item.aiStatus === 'PENDING') return 'AI 待处理'
   if (item.aiStatus === 'FAILED') return 'AI 处理失败，可重试'
+  if (item.aiStatus === 'COMPLETED' && item.contentStatus !== 'COMPLETED') return 'AI 已基于标题和标签整理；正文尚未补全'
   if (item.aiStatus === 'COMPLETED' && item.aiConfidence !== null && item.aiConfidence < 0.5) return 'AI 已完成，建议人工确认'
   if (item.aiStatus === 'COMPLETED' && !item.categoryId) return '暂无分类，建议人工整理'
+  if (item.contentStatus !== 'COMPLETED') return '正文尚未补全'
   return ''
+}
+
+function sourceLabel(item: KnowledgeItem) {
+  const relations = item.sourceRelations || []
+  if (relations.includes('FAVORITE') && relations.includes('LIKED')) return '收藏 + 点赞'
+  if (relations.includes('LIKED')) return '点赞'
+  if (relations.includes('FAVORITE')) return '收藏'
+  return item.sourceType === 'XIAOHONGSHU' ? '小红书' : item.sourceType
 }
 </script>
 
@@ -91,7 +100,7 @@ function aiReviewHint(item: KnowledgeItem) {
     <div v-if="loading" class="drawer-loading"><el-skeleton :rows="8" animated /></div>
     <article v-else-if="item" class="detail-content">
       <div class="detail-topline">
-        <span>小红书</span>
+        <span>{{ sourceLabel(item) }}</span>
         <el-button text @click="drawerVisible = false">关闭</el-button>
       </div>
 
@@ -140,7 +149,7 @@ function aiReviewHint(item: KnowledgeItem) {
           <el-button
             :icon="MagicStick"
             :loading="organizing"
-            :disabled="item.contentStatus !== 'COMPLETED' || item.manualMetadataLocked"
+            :disabled="item.manualMetadataLocked || item.aiStatus === 'PROCESSING'"
             @click="$emit('organize')"
           >重新 AI 整理</el-button>
         </div>

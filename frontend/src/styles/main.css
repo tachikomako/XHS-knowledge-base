@@ -135,6 +135,13 @@ button, input, textarea { font: inherit; }
 .category-sidebar button:hover, .category-sidebar button.active { color: #415238; background: #e8eee4; }
 .category-sidebar button.child { padding-left: 22px; color: #746d63; font-size: 12px; }
 .category-sidebar small { color: #918a80; }
+.source-scope-nav {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(39, 35, 31, .1);
+}
 
 .library-grid {
   display: grid;

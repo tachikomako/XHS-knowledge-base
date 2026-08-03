@@ -17,12 +17,21 @@ function formatDate(value: string) {
 }
 
 function reviewStatus(item: KnowledgeItem) {
-  if (item.contentStatus !== 'COMPLETED') return '正文待补全，暂不可 AI 整理'
   if (item.aiStatus === 'PENDING') return 'AI 待处理'
   if (item.aiStatus === 'FAILED') return 'AI 处理失败，可重试'
+  if (item.aiStatus === 'COMPLETED' && item.contentStatus !== 'COMPLETED') return 'AI 已基于标题和标签整理；正文尚未补全'
   if (item.aiStatus === 'COMPLETED' && item.aiConfidence !== null && item.aiConfidence < 0.5) return '建议人工确认'
   if (item.aiStatus === 'COMPLETED' && !item.categoryId) return '暂无分类，建议人工整理'
+  if (item.contentStatus !== 'COMPLETED') return '正文尚未补全'
   return ''
+}
+
+function sourceLabel(item: KnowledgeItem) {
+  const relations = item.sourceRelations || []
+  if (relations.includes('FAVORITE') && relations.includes('LIKED')) return '收藏 + 点赞'
+  if (relations.includes('LIKED')) return '点赞'
+  if (relations.includes('FAVORITE')) return '收藏'
+  return item.sourceType === 'XIAOHONGSHU' ? '小红书' : item.sourceType
 }
 </script>
 
@@ -42,7 +51,7 @@ function reviewStatus(item: KnowledgeItem) {
       </div>
       <div class="card-footer">
         <span>{{ categoryName || '未分类' }}</span>
-        <span>{{ item.sourceType === 'XIAOHONGSHU' ? '小红书' : item.sourceType }}</span>
+        <span>{{ sourceLabel(item) }}</span>
         <span v-if="item.userNote" class="has-note">有笔记</span>
       </div>
       <div v-if="reviewStatus(item)" class="card-status">{{ reviewStatus(item) }}</div>

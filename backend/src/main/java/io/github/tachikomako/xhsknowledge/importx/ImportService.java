@@ -74,11 +74,11 @@ public class ImportService {
                 switch (result.status()) {
                     case "CREATED" -> {
                         created++;
-                        if (StringUtils.hasText(incoming.text())) aiItemIds.add(result.itemId());
+                        aiItemIds.add(result.itemId());
                     }
                     case "UPDATED" -> {
                         updated++;
-                        if (StringUtils.hasText(incoming.text())) aiItemIds.add(result.itemId());
+                        aiItemIds.add(result.itemId());
                     }
                     default -> skipped++;
                 }

@@ -4,7 +4,7 @@ const EXTENSION_BUILD = 'ae649ff'
 const DEFAULT_SETTINGS = Object.freeze({
   backendUrl: 'http://127.0.0.1:8080',
   knowledgeBaseUrl: 'http://127.0.0.1:5173',
-  extensionToken: '',
+  extensionToken: 'dev-local-token',
 })
 
 const form = document.querySelector('#settingsForm')
@@ -17,6 +17,7 @@ const captureButton = document.querySelector('#captureButton')
 const startSyncButton = document.querySelector('#startSyncButton')
 const sourceFavorite = document.querySelector('#sourceFavorite')
 const sourceLiked = document.querySelector('#sourceLiked')
+const completeFavoriteContent = document.querySelector('#completeFavoriteContent')
 const aiAfterSync = document.querySelector('#aiAfterSync')
 const syncResult = document.querySelector('#syncResult')
 const latestSync = document.querySelector('#latestSync')
@@ -62,9 +63,7 @@ captureButton.addEventListener('click', async () => {
 
   try {
     if (currentExtraction.captureMode === 'FAVORITES_PAGE') {
-      const response = await performManualSync([currentExtraction.source])
-      renderManualSyncResult(response)
-      renderCaptureResult('已走 START_MANUAL_SYNC 正文补全链路', 'success')
+      renderCaptureResult('列表页请使用上方手动同步入口', 'error')
       return
     }
     const response = await chrome.runtime.sendMessage({ type: 'IMPORT_XHS_ITEMS', payload: currentExtraction })
@@ -84,6 +83,10 @@ startSyncButton.addEventListener('click', async () => {
   if (sources.length === 0) {
     renderSyncResult('请至少选择收藏或点赞', 'error')
     return
+  }
+  if (completeFavoriteContent.checked && sources.includes('FAVORITE')) {
+    const confirmed = window.confirm('补全收藏正文会逐篇打开详情页，耗时更长。继续吗？')
+    if (!confirmed) return
   }
   startSyncButton.disabled = true
   startSyncButton.setAttribute('aria-busy', 'true')
@@ -145,17 +148,14 @@ async function inspectCurrentPage() {
         response.item.author || '作者未知',
       ].filter(Boolean).join(' · ')
     } else if (response.pageType === 'FAVORITE') {
-      currentExtraction = {
-        captureMode: 'FAVORITES_PAGE',
-        extractorVersion: response.extractorVersion,
-        source: 'FAVORITE',
-        items: response.items,
-      }
+      currentExtraction = null
       captureTitle.textContent = `识别到 ${response.stats.candidates} 条收藏卡片`
       captureMeta.textContent = response.stats.candidates
         ? `可同步 ${response.items.length} 条 · 缺少访问参数 ${response.stats.missingTokenCount} 条；向下滚动后可加载更多`
         : '请确认已进入“收藏”标签，并先向下滚动加载内容'
-      renderDiagnostics(response.stats)
+      renderDiagnostics(response.stats, response.extractorVersion, 'FAVORITES_PAGE')
+      captureButton.textContent = '使用上方手动同步'
+      captureButton.disabled = true
     } else if (response.pageType === 'FEED') {
       currentExtraction = null
       captureTitle.textContent = response.postCount
@@ -213,12 +213,12 @@ function isMissingContentScriptError(error) {
   return error instanceof Error && error.message.includes('Receiving end does not exist')
 }
 
-function renderDiagnostics(stats) {
+function renderDiagnostics(stats, extractorVersion = currentExtraction?.extractorVersion, pageType = currentExtraction?.captureMode) {
   diagnosticText.value = JSON.stringify({
     extensionBuild: EXTENSION_BUILD,
     extensionVersion: chrome.runtime.getManifest().version,
-    extractorVersion: currentExtraction.extractorVersion,
-    pageType: currentExtraction.captureMode,
+    extractorVersion,
+    pageType,
     candidates: stats.candidates,
     extracted: stats.extracted,
     skipped: stats.skipped,
@@ -237,7 +237,12 @@ function renderDiagnostics(stats) {
 async function performManualSync(sources) {
   const response = await chrome.runtime.sendMessage({
     type: 'START_MANUAL_SYNC',
-    payload: { sources, aiAfterSync: aiAfterSync.checked, extensionBuild: EXTENSION_BUILD },
+    payload: {
+      sources,
+      aiAfterSync: aiAfterSync.checked,
+      completeFavoriteContent: completeFavoriteContent.checked && sources.includes('FAVORITE'),
+      extensionBuild: EXTENSION_BUILD,
+    },
   })
   if (!response?.ok) throw new Error(response?.error || response?.errors?.[0] || '同步失败')
   return response
@@ -256,13 +261,16 @@ function renderImportResult(result) {
 function renderManualSyncResult(response) {
   const run = response.syncRun
   const result = response.result
+  const contentText = response.contentRequested || result.contentRequested
+    ? `正文 ${run.contentCompletedCount}/${run.contentCompletedCount + run.contentFailedCount}`
+    : '正文：未请求'
   const message = [
     `发现 ${run.discoveredCount}`,
     `处理 ${run.processedCount}`,
     `新增 ${result.created}`,
     `更新 ${result.updated}`,
     `未变 ${result.skipped}`,
-    `正文 ${run.contentCompletedCount}/${run.contentCompletedCount + run.contentFailedCount}`,
+    contentText,
     `失败 ${result.failed}`,
   ].join(' · ')
   renderSyncResult(message, run.status === 'COMPLETED' ? 'success' : 'error')
@@ -289,8 +297,9 @@ function renderLatestSync(run) {
     `新增 ${run.createdCount}`,
     `更新 ${run.updatedCount}`,
     `未变 ${run.unchangedCount}`,
-    `正文 ${run.contentCompletedCount}/${run.contentCompletedCount + run.contentFailedCount}`,
-    run.errorSummary || null,
+    run.contentCompletedCount + run.contentFailedCount > 0
+      ? `正文 ${run.contentCompletedCount}/${run.contentCompletedCount + run.contentFailedCount}`
+      : '正文：未请求',
   ].filter(Boolean).join(' · ')
 }
 
@@ -337,7 +346,7 @@ async function checkHealth() {
 
 async function loadSettings() {
   const saved = await chrome.storage.local.get(Object.keys(DEFAULT_SETTINGS))
-  const settings = { ...DEFAULT_SETTINGS, ...saved }
+  const settings = withDefaultToken({ ...DEFAULT_SETTINGS, ...saved })
   for (const [key, value] of Object.entries(settings)) {
     const input = document.querySelector(`#${key}`)
     if (input) input.value = value
@@ -349,7 +358,14 @@ function readFormSettings() {
   return {
     backendUrl: normalizeUrl(data.get('backendUrl')),
     knowledgeBaseUrl: normalizeUrl(data.get('knowledgeBaseUrl')),
-    extensionToken: String(data.get('extensionToken') || '').trim(),
+    extensionToken: String(data.get('extensionToken') || '').trim() || DEFAULT_SETTINGS.extensionToken,
+  }
+}
+
+function withDefaultToken(settings) {
+  return {
+    ...settings,
+    extensionToken: String(settings.extensionToken || '').trim() || DEFAULT_SETTINGS.extensionToken,
   }
 }
 
