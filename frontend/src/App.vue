@@ -4,6 +4,8 @@ import { Collection, Connection, Refresh, Search, Setting } from '@element-plus/
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { clearItems, deleteItem, getAiTask, getItem, organizeItem, organizePendingAi, organizeSelectedAi, searchItems, updateItem } from './api/items'
 import type { AiOrganizeTask, KnowledgeItem } from './api/items'
+import { aiTaskProgressText, isAiActionDisabled, isAiActionLoading } from './aiTaskUi'
+import type { AiAction } from './aiTaskUi'
 import {
   confirmCategorySuggestions,
   createCategory,
@@ -44,7 +46,6 @@ const listError = ref('')
 const drawerVisible = ref(false)
 const detailLoading = ref(false)
 const detailSaving = ref(false)
-const detailOrganizing = ref(false)
 const selectedItem = ref<KnowledgeItem | null>(null)
 const categories = ref<Category[]>([])
 const tags = ref<Tag[]>([])
@@ -57,7 +58,7 @@ const settingsVisible = ref(false)
 const settingsLoading = ref(false)
 const settingsSaving = ref(false)
 const aiTesting = ref(false)
-const aiOrganizingPending = ref(false)
+const activeAiAction = ref<AiAction>(null)
 const aiTask = ref<AiOrganizeTask | null>(null)
 const selectedIds = ref<string[]>([])
 const settings = ref<SettingsResponse | null>(null)
@@ -67,6 +68,7 @@ let listController: AbortController | null = null
 let detailController: AbortController | null = null
 let metadataController: AbortController | null = null
 let settingsController: AbortController | null = null
+let aiPollController: AbortController | null = null
 let aiPollTimer: number | null = null
 
 const tagNames = computed(() => Object.fromEntries(tags.value.map((tag) => [tag.id, tag.name])))
@@ -107,6 +109,7 @@ onBeforeUnmount(() => {
   detailController?.abort()
   metadataController?.abort()
   settingsController?.abort()
+  aiPollController?.abort()
   if (aiPollTimer !== null) window.clearTimeout(aiPollTimer)
 })
 
@@ -236,26 +239,28 @@ async function clearAiKey() {
 }
 
 async function organizePending() {
-  aiOrganizingPending.value = true
+  if (activeAiAction.value) return
+  activeAiAction.value = 'ALL_PENDING'
   try {
     await watchAiTask(await organizePendingAi())
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '整理待处理内容失败')
-    aiOrganizingPending.value = false
+    activeAiAction.value = null
   }
 }
 
 async function organizeSelected() {
+  if (activeAiAction.value) return
   if (selectedIds.value.length === 0) {
     ElMessage.warning('请先选择帖子')
     return
   }
-  aiOrganizingPending.value = true
+  activeAiAction.value = 'SELECTED'
   try {
     await watchAiTask(await organizeSelectedAi(selectedIds.value))
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : 'AI 分类失败')
-    aiOrganizingPending.value = false
+    activeAiAction.value = null
   }
 }
 
@@ -263,7 +268,7 @@ async function watchAiTask(task: AiOrganizeTask) {
   aiTask.value = task
   if (task.status === 'REJECTED' || !task.id) {
     ElMessage.warning(task.message || '没有可分类内容')
-    aiOrganizingPending.value = false
+    activeAiAction.value = null
     return
   }
   ElMessage.success('AI 分类任务已创建')
@@ -273,11 +278,15 @@ async function watchAiTask(task: AiOrganizeTask) {
 function pollAiTask(id: string) {
   if (aiPollTimer !== null) window.clearTimeout(aiPollTimer)
   aiPollTimer = window.setTimeout(async () => {
+    aiPollController?.abort()
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 10000)
+    aiPollController = controller
     try {
-      const task = await getAiTask(id)
+      const task = await getAiTask(id, controller.signal)
       aiTask.value = task
       if (['COMPLETED', 'COMPLETED_WITH_ERRORS', 'REJECTED'].includes(task.status)) {
-        aiOrganizingPending.value = false
+        activeAiAction.value = null
         selectedIds.value = []
         await Promise.all([loadItems(), loadMetadata(), loadSettings()])
         ElMessage[task.failed > 0 ? 'warning' : 'success'](task.message || 'AI 分类完成')
@@ -285,8 +294,11 @@ function pollAiTask(id: string) {
       }
       pollAiTask(id)
     } catch (error) {
-      aiOrganizingPending.value = false
+      activeAiAction.value = null
       ElMessage.error(error instanceof Error ? error.message : '读取 AI 任务进度失败')
+    } finally {
+      window.clearTimeout(timeout)
+      if (aiPollController === controller) aiPollController = null
     }
   }, 1200)
 }
@@ -295,10 +307,6 @@ function toggleSelect(item: KnowledgeItem) {
   selectedIds.value = selectedIds.value.includes(item.id)
     ? selectedIds.value.filter((id) => id !== item.id)
     : [...selectedIds.value, item.id]
-}
-
-function aiTaskText(task: AiOrganizeTask) {
-  return `正在分类：${task.processed} / ${task.total} · 成功：${task.succeeded} · 失败：${task.failed}`
 }
 
 function filterByTag(selectedTagId: string) {
@@ -366,8 +374,9 @@ async function saveDetails(changes: {
 }
 
 async function organizeSelectedItem() {
+  if (activeAiAction.value) return
   if (!selectedItem.value) return
-  detailOrganizing.value = true
+  activeAiAction.value = 'CURRENT'
   try {
     selectedItem.value = await organizeItem(selectedItem.value.id)
     replaceItem(selectedItem.value)
@@ -376,7 +385,7 @@ async function organizeSelectedItem() {
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : 'AI 整理失败')
   } finally {
-    detailOrganizing.value = false
+    activeAiAction.value = null
   }
 }
 
@@ -609,9 +618,9 @@ function replaceItem(updated: KnowledgeItem) {
       </div>
       <div class="filter-row ai-actions">
         <span>AI 分类</span>
-        <el-button size="large" plain :loading="aiOrganizingPending" @click="organizeSelected">分类所选帖子</el-button>
-        <el-button size="large" type="primary" plain :loading="aiOrganizingPending" @click="organizePending">分类全部待分类帖子</el-button>
-        <span v-if="aiTask" class="ai-progress">{{ aiTaskText(aiTask) }}</span>
+        <el-button size="large" plain :loading="isAiActionLoading(activeAiAction, 'SELECTED')" :disabled="isAiActionDisabled(activeAiAction, 'SELECTED')" @click="organizeSelected">分类所选帖子</el-button>
+        <el-button size="large" type="primary" plain :loading="isAiActionLoading(activeAiAction, 'ALL_PENDING')" :disabled="isAiActionDisabled(activeAiAction, 'ALL_PENDING')" @click="organizePending">分类全部待分类帖子</el-button>
+        <span v-if="aiTask" class="ai-progress">{{ aiTaskProgressText(aiTask) }}</span>
       </div>
     </section>
 
@@ -680,7 +689,8 @@ function replaceItem(updated: KnowledgeItem) {
       :item="selectedItem"
       :loading="detailLoading"
       :saving="detailSaving"
-      :organizing="detailOrganizing"
+      :organizing="isAiActionLoading(activeAiAction, 'CURRENT')"
+      :organize-disabled="isAiActionDisabled(activeAiAction, 'CURRENT')"
       :categories="orderedCategories"
       :tags="tags"
       @save="saveDetails"
@@ -715,7 +725,7 @@ function replaceItem(updated: KnowledgeItem) {
       :loading="settingsLoading"
       :saving="settingsSaving"
       :testing-ai="aiTesting"
-      :organizing-pending="aiOrganizingPending"
+      :active-ai-action="activeAiAction"
       :ai-task="aiTask"
       @reload="loadSettings"
       @save-ai="saveAiSettings"

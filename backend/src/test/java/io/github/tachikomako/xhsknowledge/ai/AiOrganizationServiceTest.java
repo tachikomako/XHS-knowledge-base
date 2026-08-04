@@ -182,6 +182,8 @@ class AiOrganizationServiceTest {
         String taskId = objectMapper.readTree(mockMvc.perform(post("/api/v1/ai/organize-pending"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.scope").value("ALL_PENDING"))
+                .andExpect(jsonPath("$.requestedCount").value(1))
                 .andExpect(jsonPath("$.total").value(1))
                 .andReturn().getResponse().getContentAsString()).path("id").asText();
         waitForTask(taskId);
@@ -189,6 +191,40 @@ class AiOrganizationServiceTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT summary FROM knowledge_items WHERE id = ?", String.class, itemId
         )).isEqualTo("Recovered summary");
+    }
+
+    @Test
+    void selectedTaskKeepsItsScopeAndRequestedCount() throws Exception {
+        enableAi();
+        String categoryId = insertCategory("AI");
+        insertItem("selected-1", "COMPLETED", "PENDING", 0);
+        insertItem("selected-2", "COMPLETED", "PENDING", 0);
+        insertItem("selected-3", "COMPLETED", "PENDING", 0);
+        when(qwenClient.configured()).thenReturn(true);
+        when(qwenClient.organize(anyString())).thenReturn(new QwenAiResult(
+                "Selected summary",
+                categoryId,
+                List.of(),
+                List.of(),
+                0.8
+        ));
+
+        String taskId = objectMapper.readTree(mockMvc.perform(post("/api/v1/ai/organize-tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"itemIds":["selected-1","selected-2","selected-3"]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scope").value("SELECTED"))
+                .andExpect(jsonPath("$.requestedCount").value(3))
+                .andExpect(jsonPath("$.total").value(3))
+                .andReturn().getResponse().getContentAsString()).path("id").asText();
+
+        mockMvc.perform(get("/api/v1/ai/organize-tasks/{id}", waitForTask(taskId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scope").value("SELECTED"))
+                .andExpect(jsonPath("$.requestedCount").value(3))
+                .andExpect(jsonPath("$.total").value(3));
     }
 
     @Test

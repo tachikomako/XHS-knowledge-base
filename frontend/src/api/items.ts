@@ -70,9 +70,13 @@ export interface AiOrganizeBatchResponse {
   message: string | null
 }
 
+export type AiTaskScope = 'CURRENT' | 'SELECTED' | 'ALL_PENDING'
+
 export interface AiOrganizeTask {
   id: string | null
   status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'REJECTED'
+  scope: AiTaskScope
+  requestedCount: number
   total: number
   processed: number
   succeeded: number
