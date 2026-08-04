@@ -74,7 +74,7 @@ export type AiTaskScope = 'CURRENT' | 'SELECTED' | 'ALL_PENDING'
 
 export interface AiOrganizeTask {
   id: string | null
-  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'REJECTED'
+  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'REJECTED' | 'CANCELLED'
   scope: AiTaskScope
   requestedCount: number
   total: number
@@ -133,6 +133,10 @@ export function organizeSelectedAi(itemIds: string[]): Promise<AiOrganizeTask> {
 
 export function getAiTask(id: string, signal?: AbortSignal): Promise<AiOrganizeTask> {
   return requestJson<AiOrganizeTask>(`/api/v1/ai/organize-tasks/${encodeURIComponent(id)}`, { signal })
+}
+
+export function cancelAiTask(id: string): Promise<AiOrganizeTask> {
+  return requestJson<AiOrganizeTask>(`/api/v1/ai/organize-tasks/${encodeURIComponent(id)}/cancel`, { method: 'POST' })
 }
 
 export async function deleteItem(id: string): Promise<void> {

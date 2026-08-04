@@ -17,5 +17,6 @@ export function aiTaskScopeLabel(task: AiOrganizeTask) {
 }
 
 export function aiTaskProgressText(task: AiOrganizeTask) {
-  return `${aiTaskScopeLabel(task)} · 已处理 ${task.processed} / ${task.total} · 成功 ${task.succeeded} · 失败 ${task.failed}`
+  const label = task.status === 'CANCELLED' ? 'AI 分类已中断' : aiTaskScopeLabel(task)
+  return `${label} · 已处理 ${task.processed} / ${task.total} · 成功 ${task.succeeded} · 失败 ${task.failed}`
 }

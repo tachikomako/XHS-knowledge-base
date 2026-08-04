@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive, watch } from 'vue'
+import { CircleClose } from '@element-plus/icons-vue'
 import type { AiOrganizeTask } from '../api/items'
 import { aiTaskProgressText, isAiActionDisabled, isAiActionLoading } from '../aiTaskUi'
 import type { AiAction } from '../aiTaskUi'
@@ -15,6 +16,7 @@ const props = defineProps<{
   saving: boolean
   testingAi: boolean
   activeAiAction: AiAction
+  aiCancelling: boolean
   aiTask: AiOrganizeTask | null
 }>()
 const emit = defineEmits<{
@@ -24,6 +26,7 @@ const emit = defineEmits<{
   testAi: []
   clearAiKey: []
   organizePending: []
+  cancelAiTask: []
 }>()
 
 const form = reactive({
@@ -120,6 +123,7 @@ function syncStatusLabel(status: SyncRunResponse['status']) {
 
       <section class="settings-actions">
         <el-button type="primary" plain :loading="isAiActionLoading(activeAiAction, 'ALL_PENDING')" :disabled="isAiActionDisabled(activeAiAction, 'ALL_PENDING')" @click="$emit('organizePending')">分类全部待分类帖子</el-button>
+        <el-button plain type="danger" :icon="CircleClose" :loading="aiCancelling" :disabled="!aiTask?.id || !activeAiAction || activeAiAction === 'CURRENT'" @click="$emit('cancelAiTask')">中断分类</el-button>
         <span v-if="aiTask">{{ aiTaskProgressText(aiTask) }}</span>
       </section>
 

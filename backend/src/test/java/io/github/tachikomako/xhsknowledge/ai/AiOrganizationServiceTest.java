@@ -13,6 +13,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -228,6 +230,44 @@ class AiOrganizationServiceTest {
     }
 
     @Test
+    void cancelsRunningTaskBeforeProcessingRemainingItems() throws Exception {
+        enableAi();
+        String categoryId = insertCategory("AI");
+        insertItem("cancel-1", "COMPLETED", "PENDING", 0);
+        insertItem("cancel-2", "COMPLETED", "PENDING", 0);
+        insertItem("cancel-3", "COMPLETED", "PENDING", 0);
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        when(qwenClient.configured()).thenReturn(true);
+        when(qwenClient.organize(anyString())).thenAnswer(invocation -> {
+            started.countDown();
+            release.await(5, TimeUnit.SECONDS);
+            return new QwenAiResult("Cancelled summary", categoryId, List.of(), List.of(), 0.8);
+        });
+
+        String taskId = objectMapper.readTree(mockMvc.perform(post("/api/v1/ai/organize-tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"itemIds":["cancel-1","cancel-2","cancel-3"]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(3))
+                .andReturn().getResponse().getContentAsString()).path("id").asText();
+
+        assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+        mockMvc.perform(post("/api/v1/ai/organize-tasks/{id}/cancel", taskId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+        release.countDown();
+
+        mockMvc.perform(get("/api/v1/ai/organize-tasks/{id}", waitForProcessed(taskId, 1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.processed").value(1))
+                .andExpect(jsonPath("$.total").value(3));
+    }
+
+    @Test
     void batchKeepsGoingWhenOneItemFails() throws Exception {
         enableAi();
         String categoryId = insertCategory("AI");
@@ -404,7 +444,20 @@ class AiOrganizationServiceTest {
                     .andExpect(status().isOk())
                     .andReturn().getResponse().getContentAsString();
             String status = objectMapper.readTree(body).path("status").asText();
-            if (status.equals("COMPLETED") || status.equals("COMPLETED_WITH_ERRORS") || status.equals("REJECTED")) {
+            if (status.equals("COMPLETED") || status.equals("COMPLETED_WITH_ERRORS") || status.equals("REJECTED") || status.equals("CANCELLED")) {
+                return taskId;
+            }
+            Thread.sleep(100);
+        }
+        return taskId;
+    }
+
+    private String waitForProcessed(String taskId, int processed) throws Exception {
+        for (int attempt = 0; attempt < 50; attempt++) {
+            String body = mockMvc.perform(get("/api/v1/ai/organize-tasks/{id}", taskId))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            if (objectMapper.readTree(body).path("processed").asInt() >= processed) {
                 return taskId;
             }
             Thread.sleep(100);
