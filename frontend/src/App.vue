@@ -40,7 +40,7 @@ const queryInput = ref('')
 const appliedQuery = ref('')
 const categoryId = ref('')
 const tagId = ref('')
-const sourceScope = ref<'ALL' | 'FAVORITE' | 'LIKED' | 'BOTH'>('ALL')
+const sourceScope = ref<'ALL' | 'FAVORITE'>('ALL')
 const listLoading = ref(false)
 const listError = ref('')
 const drawerVisible = ref(false)
@@ -337,6 +337,11 @@ function selectCategory(selectedCategoryId: string) {
   categoryId.value = selectedCategoryId
 }
 
+function selectSource(nextSourceScope: 'ALL' | 'FAVORITE') {
+  sourceScope.value = nextSourceScope
+  categoryId.value = ''
+}
+
 function applySearch() {
   appliedQuery.value = queryInput.value.trim()
   page.value = 1
@@ -553,7 +558,7 @@ function handleDialogError(error: unknown) {
 async function deleteSelectedItem() {
   if (!selectedItem.value) return
   try {
-    await ElMessageBox.confirm('删除后数据库中会直接移除；如果它仍在小红书收藏或点赞中，下次手动同步可重新创建。', '删除这条内容？', {
+    await ElMessageBox.confirm('删除后数据库中会直接移除；如果它仍在小红书收藏中，下次手动同步可重新创建。', '删除这条内容？', {
       confirmButtonText: '删除',
       cancelButtonText: '取消',
       type: 'warning',
@@ -652,13 +657,10 @@ function replaceItem(updated: KnowledgeItem) {
     <section class="library-body">
       <aside class="category-sidebar" aria-label="分类树">
         <div class="source-scope-nav">
-          <button type="button" :class="{ active: sourceScope === 'ALL' }" @click="sourceScope = 'ALL'">全部</button>
-          <button type="button" :class="{ active: sourceScope === 'FAVORITE' }" @click="sourceScope = 'FAVORITE'">收藏</button>
-          <button type="button" :class="{ active: sourceScope === 'LIKED' }" @click="sourceScope = 'LIKED'">点赞</button>
-          <button type="button" :class="{ active: sourceScope === 'BOTH' }" @click="sourceScope = 'BOTH'">收藏 + 点赞</button>
+          <button type="button" :class="{ active: sourceScope === 'ALL' && categoryId !== '__pending__' }" @click="selectSource('ALL')">所有内容</button>
+          <button type="button" :class="{ active: sourceScope === 'FAVORITE' && categoryId !== '__pending__' }" @click="selectSource('FAVORITE')">我的收藏</button>
+          <button type="button" :class="{ active: categoryId === '__pending__' }" @click="selectCategory('__pending__')">待整理</button>
         </div>
-        <button type="button" :class="{ active: !categoryId }" @click="selectCategory('')">所有</button>
-        <button type="button" :class="{ active: categoryId === '__pending__' }" @click="selectCategory('__pending__')">待整理</button>
         <div v-for="category in categoryTree" :key="category.id" class="category-branch">
           <button type="button" :class="{ active: categoryId === category.id }" @click="selectCategory(category.id)">
             <span>{{ category.name }}</span><small>{{ category.itemCount }}</small>

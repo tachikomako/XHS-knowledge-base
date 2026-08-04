@@ -1,6 +1,6 @@
 export type CaptureLevel = 'CARD' | 'DETAIL'
 export type ContentStatus = 'DISCOVERED' | 'FETCHING' | 'COMPLETED' | 'FAILED'
-export type SourceScope = 'ALL' | 'FAVORITE' | 'LIKED' | 'BOTH'
+export type SourceScope = 'ALL' | 'FAVORITE'
 
 export interface KnowledgeItem {
   id: string

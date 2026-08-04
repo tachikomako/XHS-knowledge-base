@@ -35,7 +35,7 @@ The server limits each batch to 50 items. Reusing `clientBatchId` replays the st
 
 When AI is enabled and Qwen is configured, successfully created or updated items are saved first, then organized in a background task. AI failure never rolls back the import.
 
-`sourceRelation` is optional and records whether a note came from favorites, likes, or both without duplicating the knowledge item.
+`sourceRelation` is optional. New extension sync sends `FAVORITE`; the backend still accepts historical `LIKED` records so existing SQLite data can be read without duplicating the knowledge item.
 
 `contentStatus` is optional on import and can be `DISCOVERED`, `COMPLETED`, or `FAILED`. List-card imports default to `DISCOVERED`; detail-page imports with text become `COMPLETED`; failures can be recorded with `contentLastError`.
 
@@ -43,7 +43,7 @@ When AI is enabled and Qwen is configured, successfully created or updated items
 
 ## Manual sync runs
 
-- `POST /sync-runs`: create a user-triggered sync task. Body: `{ "requestedSources": ["FAVORITE", "LIKED"] }`. Requires `X-Extension-Token`.
+- `POST /sync-runs`: create a user-triggered sync task. New extension flow uses `{ "requestedSources": ["FAVORITE"] }`. Requires `X-Extension-Token`.
 - `PATCH /sync-runs/{id}`: update task counters and final status. Requires `X-Extension-Token`.
 - `GET /sync-runs/latest`: latest task result for the extension popup and website settings dialog.
 

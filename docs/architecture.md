@@ -21,7 +21,7 @@ flowchart LR
 - Local deletion is independent from Xiaohongshu. Deleting an item locally does not remove the platform favorite; the next manual sync may recreate it.
 - Images are intentionally outside the product surface: the extension does not upload image URLs, the backend does not depend on image data, and the website does not render covers or image strips.
 - Clearing the knowledge library is a confirmed physical delete of item rows and their item-level relations only; user taxonomy, settings, and sync history remain.
-- Manual sync runs are created only from the extension button. The run may navigate and scroll favorites/likes once, then it stops.
+- Manual sync runs are created only from the extension button. The current product flow navigates and scrolls favorites once, then it stops.
 - AI organization is only triggered by user actions: import/current clip/manual sync after content is saved, the single-item organize button, or the settings dialog batch organize button. The backend does not run timer-based AI jobs.
 - Original Xiaohongshu hashtags are stored in `knowledge_item_source_tags`. They are used for category suggestion statistics and are separate from the editable tag library.
 
@@ -30,13 +30,13 @@ flowchart LR
 - `CARD`: metadata visible on the favorites page. It is the reliable baseline for historical indexing.
 - `DETAIL`: content visible on a currently opened post. Importing `DETAIL` upgrades an existing `CARD`; later card imports never downgrade it.
 
-During a manual favorites/likes sync, the extension first discovers list cards, then opens detail URLs one at a time to complete missing or previously failed text. The backend records item-level content status as `DISCOVERED`, `COMPLETED`, or `FAILED`; a single detail failure does not fail the whole sync run.
+During a manual favorites sync, the extension first discovers list cards, then opens detail URLs one at a time only when the user enables favorite content completion. The backend records item-level content status as `DISCOVERED`, `COMPLETED`, or `FAILED`; a single detail failure does not fail the whole sync run.
 
 ## Source abstraction
 
 The persisted model uses `sourceType`, `sourceItemId`, and `canonicalUrl`. Only `XIAOHONGSHU` is implemented now. Future platforms should add an extractor and URL normalizer without changing item lifecycle, search, categories, or tags.
 
-Favorites and likes are stored as item source relations, so the same Xiaohongshu `noteId` can be both favorited and liked without creating duplicate knowledge items.
+Favorites are stored as item source relations. Historical `LIKED` relations remain readable for existing SQLite data, so the same Xiaohongshu `noteId` is still represented by one knowledge item.
 
 ## Current milestones
 
@@ -47,7 +47,7 @@ Favorites and likes are stored as item source relations, so the same Xiaohongshu
 - M4: user-managed two-level categories, cross-category tags, item assignment, and taxonomy filters.
 - M5: user-confirmed favorites-page card indexing, client deduplication, and 50-item import batches.
 - M5.1: link-based card-boundary fallback, in-popup rescanning, and content-free selector diagnostics.
-- M6: user-triggered sync runs, favorites/likes source adapters, bounded auto-scroll discovery, and latest sync result display.
+- M6: user-triggered sync runs, favorites source adapter, bounded auto-scroll discovery, and latest sync result display.
 - M7: detail-page text completion during manual sync, safe Qwen connection testing, and manual single/batch AI organization controls.
 - M8: original hashtag statistics, Qwen category suggestions, user-confirmed category creation, and a pending-organization sidebar entry.
 - Next: richer AI review UX and retry visibility for long-running batches.

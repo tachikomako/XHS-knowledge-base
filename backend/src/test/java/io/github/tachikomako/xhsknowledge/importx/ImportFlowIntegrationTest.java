@@ -311,6 +311,28 @@ class ImportFlowIntegrationTest {
         )).isEqualTo(2);
     }
 
+    @Test
+    void keepsHistoricalLikedOnlyItemsVisibleInAllContent() throws Exception {
+        mockMvc.perform(post("/api/v1/imports/xiaohongshu")
+                        .header("X-Extension-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(importJson(
+                                "batch-historical-liked",
+                                "CARD",
+                                null,
+                                "https://www.xiaohongshu.com/explore/historyliked?xsec_token=liked-token&xsec_source=pc_like",
+                                "LIKED"
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.created").value(1));
+
+        mockMvc.perform(get("/api/v1/items"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].sourceRelations[0]").value("LIKED"));
+        assertThat(count("knowledge_items")).isOne();
+    }
+
     private String importJson(String batchId, String captureLevel, String text) throws Exception {
         return importJson(
                 batchId,

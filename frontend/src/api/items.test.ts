@@ -25,14 +25,14 @@ describe('knowledge item API', () => {
       q: '  Agent  ',
       categoryId: 'category-1',
       tagId: 'tag-1',
-      sourceScope: 'BOTH',
+      sourceScope: 'FAVORITE',
       captureLevel: '',
       contentStatus: 'FAILED',
       page: 2,
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/items?q=Agent&categoryId=category-1&tagId=tag-1&sourceScope=BOTH&contentStatus=FAILED&page=2&pageSize=12&sort=updatedAt%2Cdesc',
+      '/api/v1/items?q=Agent&categoryId=category-1&tagId=tag-1&sourceScope=FAVORITE&contentStatus=FAILED&page=2&pageSize=12&sort=updatedAt%2Cdesc',
       expect.objectContaining({ signal: undefined }),
     )
   })

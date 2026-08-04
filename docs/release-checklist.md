@@ -27,10 +27,9 @@ Use this checklist for the first installable MVP build.
 ## Real Xiaohongshu path
 
 - Clip one open post detail page.
-- Open the profile page, select favorites and/or likes in the popup, then click "start sync".
-- Confirm the extension navigates to `tab=fav&subTab=note` and `tab=liked&subTab=note` only after that click.
+- Open the profile page, optionally enable favorite content completion in the popup, then click "start sync".
+- Confirm the extension navigates only to `tab=fav&subTab=note` after that click.
 - Sync the same post twice and confirm only one item exists.
-- Confirm a note appearing in both favorites and likes creates one item with two source relations.
 - Confirm newly discovered list items move to completed text when their detail page can be opened, and that failed detail extraction is counted without stopping the sync.
 - Open the saved item and confirm "view original post" keeps the complete `xsec_token` URL behavior.
 - Confirm the website shows no imported visual media and makes no proxied media requests.
