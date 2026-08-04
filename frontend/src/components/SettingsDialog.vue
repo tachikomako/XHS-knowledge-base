@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { reactive, watch } from 'vue'
 import type { AiOrganizeTask } from '../api/items'
+import { aiTaskProgressText, isAiActionDisabled, isAiActionLoading } from '../aiTaskUi'
+import type { AiAction } from '../aiTaskUi'
 import type { AiSettingsUpdate, SettingsResponse, SyncRunResponse } from '../api/settings'
 
 const MASKED_KEY = '••••••••••••••••'
@@ -12,7 +14,7 @@ const props = defineProps<{
   loading: boolean
   saving: boolean
   testingAi: boolean
-  organizingPending: boolean
+  activeAiAction: AiAction
   aiTask: AiOrganizeTask | null
 }>()
 const emit = defineEmits<{
@@ -117,8 +119,8 @@ function syncStatusLabel(status: SyncRunResponse['status']) {
       </section>
 
       <section class="settings-actions">
-        <el-button type="primary" plain :loading="organizingPending" @click="$emit('organizePending')">分类全部待分类帖子</el-button>
-        <span v-if="aiTask">正在分类：{{ aiTask.processed }} / {{ aiTask.total }} · 成功：{{ aiTask.succeeded }} · 失败：{{ aiTask.failed }}</span>
+        <el-button type="primary" plain :loading="isAiActionLoading(activeAiAction, 'ALL_PENDING')" :disabled="isAiActionDisabled(activeAiAction, 'ALL_PENDING')" @click="$emit('organizePending')">分类全部待分类帖子</el-button>
+        <span v-if="aiTask">{{ aiTaskProgressText(aiTask) }}</span>
       </section>
 
       <section class="settings-note">

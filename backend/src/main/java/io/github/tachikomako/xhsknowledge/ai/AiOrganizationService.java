@@ -30,6 +30,8 @@ import java.util.concurrent.Executors;
 @Service
 public class AiOrganizationService {
     private static final int TASK_BATCH_SIZE = 15;
+    private static final String SCOPE_SELECTED = "SELECTED";
+    private static final String SCOPE_ALL_PENDING = "ALL_PENDING";
 
     private final KnowledgeItemMapper itemMapper;
     private final JdbcTemplate jdbcTemplate;
@@ -112,20 +114,25 @@ public class AiOrganizationService {
     }
 
     public AiOrganizeTaskView startPendingTask() {
-        if (!settingsService.aiEnabled()) return rejectedTask("AI 整理尚未开启");
-        if (!qwenClient.configured()) return rejectedTask("请先在设置中配置并测试 Qwen API");
+        if (!settingsService.aiEnabled()) return rejectedTask(SCOPE_ALL_PENDING, 0, "AI 整理尚未开启");
+        if (!qwenClient.configured()) return rejectedTask(SCOPE_ALL_PENDING, 0, "请先在设置中配置并测试 Qwen API");
         List<String> itemIds = aiEligibilityService.eligibleItemIds(300);
-        if (itemIds.isEmpty()) return rejectedTask(noEligibleMessage(aiEligibilityService.stats()));
-        return startTask(itemIds);
+        if (itemIds.isEmpty()) return rejectedTask(SCOPE_ALL_PENDING, 0, noEligibleMessage(aiEligibilityService.stats()));
+        return startTask(SCOPE_ALL_PENDING, itemIds.size(), itemIds);
     }
 
     public AiOrganizeTaskView startTask(List<String> requestedItemIds) {
-        if (!settingsService.aiEnabled()) return rejectedTask("AI 整理尚未开启");
-        if (!qwenClient.configured()) return rejectedTask("请先在设置中配置并测试 Qwen API");
+        int requestedCount = requestedIds(requestedItemIds).size();
+        if (!settingsService.aiEnabled()) return rejectedTask(SCOPE_SELECTED, requestedCount, "AI 整理尚未开启");
+        if (!qwenClient.configured()) return rejectedTask(SCOPE_SELECTED, requestedCount, "请先在设置中配置并测试 Qwen API");
         List<String> itemIds = eligibleRequestedIds(requestedItemIds);
-        if (itemIds.isEmpty()) return rejectedTask("没有可整理内容");
+        if (itemIds.isEmpty()) return rejectedTask(SCOPE_SELECTED, requestedCount, "没有可整理内容");
 
-        AiTaskState state = new AiTaskState(UUID.randomUUID().toString(), itemIds.size());
+        return startTask(SCOPE_SELECTED, requestedCount, itemIds);
+    }
+
+    private AiOrganizeTaskView startTask(String scope, int requestedCount, List<String> itemIds) {
+        AiTaskState state = new AiTaskState(UUID.randomUUID().toString(), scope, requestedCount, itemIds.size());
         tasks.put(state.id, state);
         taskExecutor.submit(() -> runTask(state, itemIds));
         return state.view();
@@ -219,13 +226,17 @@ public class AiOrganizationService {
         );
     }
 
-    private List<String> eligibleRequestedIds(List<String> requestedItemIds) {
+    private List<String> requestedIds(List<String> requestedItemIds) {
         if (requestedItemIds == null || requestedItemIds.isEmpty()) return List.of();
-        List<String> ids = requestedItemIds.stream()
+        return requestedItemIds.stream()
                 .filter(StringUtils::hasText)
                 .distinct()
                 .limit(300)
                 .toList();
+    }
+
+    private List<String> eligibleRequestedIds(List<String> requestedItemIds) {
+        List<String> ids = requestedIds(requestedItemIds);
         if (ids.isEmpty()) return List.of();
         String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
         return jdbcTemplate.queryForList("""
@@ -239,8 +250,8 @@ public class AiOrganizationService {
                 """.formatted(placeholders), String.class, ids.toArray());
     }
 
-    private AiOrganizeTaskView rejectedTask(String message) {
-        return new AiOrganizeTaskView(null, "REJECTED", 0, 0, 0, 0, List.of(), message);
+    private AiOrganizeTaskView rejectedTask(String scope, int requestedCount, String message) {
+        return new AiOrganizeTaskView(null, "REJECTED", scope, requestedCount, 0, 0, 0, 0, List.of(), message);
     }
 
     private void validateResult(QwenAiResult result) {
@@ -394,6 +405,8 @@ public class AiOrganizationService {
 
     private static final class AiTaskState {
         private final String id;
+        private final String scope;
+        private final int requestedCount;
         private final int total;
         private final List<String> errors = Collections.synchronizedList(new ArrayList<>());
         private volatile String status = "QUEUED";
@@ -402,13 +415,15 @@ public class AiOrganizationService {
         private volatile int failed;
         private volatile String message = "任务已创建";
 
-        private AiTaskState(String id, int total) {
+        private AiTaskState(String id, String scope, int requestedCount, int total) {
             this.id = id;
+            this.scope = scope;
+            this.requestedCount = requestedCount;
             this.total = total;
         }
 
         private AiOrganizeTaskView view() {
-            return new AiOrganizeTaskView(id, status, total, processed, succeeded, failed, List.copyOf(errors), message);
+            return new AiOrganizeTaskView(id, status, scope, requestedCount, total, processed, succeeded, failed, List.copyOf(errors), message);
         }
     }
 

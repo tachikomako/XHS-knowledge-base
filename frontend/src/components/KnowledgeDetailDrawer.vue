@@ -10,6 +10,7 @@ const props = defineProps<{
   loading: boolean
   saving: boolean
   organizing: boolean
+  organizeDisabled: boolean
   categories: Category[]
   tags: Tag[]
 }>()
@@ -149,7 +150,7 @@ function sourceLabel(item: KnowledgeItem) {
           <el-button
             :icon="MagicStick"
             :loading="organizing"
-            :disabled="item.manualMetadataLocked || item.aiStatus === 'PROCESSING'"
+            :disabled="organizeDisabled || item.manualMetadataLocked || item.aiStatus === 'PROCESSING'"
             @click="$emit('organize')"
           >AI 分类当前帖子</el-button>
         </div>
