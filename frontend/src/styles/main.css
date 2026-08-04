@@ -101,6 +101,7 @@ button, input, textarea { font: inherit; }
 .search-form { display: flex; width: min(680px, 100%); gap: 10px; }
 .filter-row { flex-wrap: wrap; gap: 10px; }
 .ai-actions { align-items: center; }
+.ai-settings-entry { font-weight: 700; }
 .ai-progress { color: #6f685f; font-size: 12px; }
 .page-shell > .el-alert { margin-top: 18px; }
 
