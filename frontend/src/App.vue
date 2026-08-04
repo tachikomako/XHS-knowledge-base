@@ -4,6 +4,7 @@ import { CircleClose, Collection, Connection, Refresh, Search, Setting } from '@
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { cancelAiTask, clearItems, deleteItem, getAiTask, getItem, organizeItem, organizePendingAi, organizeSelectedAi, searchItems, updateItem } from './api/items'
 import type { AiOrganizeTask, KnowledgeItem } from './api/items'
+import { aiSettingsButtonText, canStartAiAction } from './aiSettingsUi'
 import { aiTaskProgressText, isAiActionDisabled, isAiActionLoading } from './aiTaskUi'
 import type { AiAction } from './aiTaskUi'
 import {
@@ -103,6 +104,7 @@ onMounted(() => {
   void checkHealth()
   void loadItems()
   void loadMetadata()
+  void loadSettings()
 })
 
 onBeforeUnmount(() => {
@@ -190,11 +192,15 @@ async function saveAiSettings(input: AiSettingsUpdate) {
   settingsSaving.value = true
   try {
     settings.value = await updateAiSettings(input)
-    const result = await testAiConnection()
-    if (result.success) {
-      ElMessage.success(`Qwen 连接成功：${result.model}`)
-    } else {
-      ElMessage.warning(result.message)
+    try {
+      const result = await testAiConnection()
+      if (result.success) {
+        ElMessage.success(`Qwen 连接成功：${result.model}`)
+      } else {
+        ElMessage.warning(result.message)
+      }
+    } finally {
+      await loadSettings()
     }
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '保存设置失败')
@@ -208,6 +214,7 @@ async function testAi() {
   try {
     const result = await testAiConnection()
     if (result.success) {
+      await loadSettings()
       ElMessage.success(`Qwen 连接成功：${result.model}`)
     } else {
       ElMessage.warning(result.message)
@@ -229,6 +236,7 @@ async function clearAiKey() {
     })
     settingsSaving.value = true
     settings.value = await clearAiCredentials()
+    await loadSettings()
     ElMessage.success('API Key 已清除')
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
@@ -239,8 +247,30 @@ async function clearAiKey() {
   }
 }
 
+function openAiSettings() {
+  settingsVisible.value = true
+  void loadSettings()
+}
+
+async function ensureAiConfigured() {
+  if (!settings.value) await loadSettings()
+  if (canStartAiAction(settings.value)) return true
+  try {
+    await ElMessageBox.confirm('尚未配置 Qwen API，请先完成 AI 设置', '需要 AI 设置', {
+      confirmButtonText: '前往 AI 设置',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    openAiSettings()
+  } catch {
+    // User cancelled the prompt; no AI task should be created.
+  }
+  return false
+}
+
 async function organizePending() {
   if (activeAiAction.value) return
+  if (!await ensureAiConfigured()) return
   activeAiAction.value = 'ALL_PENDING'
   try {
     await watchAiTask(await organizePendingAi())
@@ -252,6 +282,7 @@ async function organizePending() {
 
 async function organizeSelected() {
   if (activeAiAction.value) return
+  if (!await ensureAiConfigured()) return
   if (selectedIds.value.length === 0) {
     ElMessage.warning('请先选择帖子')
     return
@@ -401,6 +432,7 @@ async function saveDetails(changes: {
 async function organizeSelectedItem() {
   if (activeAiAction.value) return
   if (!selectedItem.value) return
+  if (!await ensureAiConfigured()) return
   activeAiAction.value = 'CURRENT'
   try {
     selectedItem.value = await organizeItem(selectedItem.value.id)
@@ -616,7 +648,6 @@ function replaceItem(updated: KnowledgeItem) {
           <el-icon :class="{ spinning: healthLoading }"><Refresh v-if="healthLoading" /><Connection v-else /></el-icon>
           <span>{{ health ? '本地服务已连接' : healthError || '后端未连接' }}</span>
         </button>
-        <el-button circle :icon="Setting" aria-label="设置" @click="settingsVisible = true" />
       </div>
     </header>
 
@@ -643,6 +674,9 @@ function replaceItem(updated: KnowledgeItem) {
       </div>
       <div class="filter-row ai-actions">
         <span>AI 分类</span>
+        <el-button size="large" :type="settings?.aiConfigured ? 'success' : 'warning'" plain class="ai-settings-entry" @click="openAiSettings">
+          {{ aiSettingsButtonText(settings) }}
+        </el-button>
         <el-button size="large" plain :loading="isAiActionLoading(activeAiAction, 'SELECTED')" :disabled="isAiActionDisabled(activeAiAction, 'SELECTED')" @click="organizeSelected">分类所选帖子</el-button>
         <el-button size="large" type="primary" plain :loading="isAiActionLoading(activeAiAction, 'ALL_PENDING')" :disabled="isAiActionDisabled(activeAiAction, 'ALL_PENDING')" @click="organizePending">分类全部待分类帖子</el-button>
         <el-button size="large" plain type="danger" :icon="CircleClose" :loading="aiCancelling" :disabled="!aiTask?.id || !activeAiAction || activeAiAction === 'CURRENT'" @click="cancelActiveAiTask">中断分类</el-button>

@@ -66,7 +66,7 @@ function syncStatusLabel(status: SyncRunResponse['status']) {
 <template>
   <el-dialog
     :model-value="modelValue"
-    title="设置"
+    title="AI 与本地服务设置"
     width="min(560px, calc(100% - 24px))"
     @update:model-value="$emit('update:modelValue', $event)"
     @open="$emit('reload')"
@@ -75,11 +75,29 @@ function syncStatusLabel(status: SyncRunResponse['status']) {
       <section class="settings-block">
         <div class="settings-row">
           <div>
-            <h3>AI 分类</h3>
-            <p>保存 Qwen 配置后，可在知识库中手动分类单篇、所选或全部待分类帖子。</p>
+            <h3>Qwen 配置状态</h3>
+            <p>{{ settings?.aiConfigured ? `已配置 ${settings?.model || form.model}` : '尚未配置 Qwen API，请先填写并保存。' }}</p>
           </div>
-          <el-switch v-model="form.aiEnabled" :disabled="loading || saving" />
+          <el-tag :type="settings?.aiConfigured ? 'success' : 'warning'">
+            {{ settings?.aiConfigured ? '已配置' : '未配置' }}
+          </el-tag>
         </div>
+        <section class="settings-row compact">
+          <span>AI 分类开关</span>
+          <el-switch v-model="form.aiEnabled" :disabled="loading || saving" />
+        </section>
+        <section class="settings-row compact">
+          <span>当前模型</span>
+          <strong>{{ settings?.model || form.model }}</strong>
+        </section>
+        <section class="settings-row compact">
+          <span>AI 待处理</span>
+          <strong>{{ settings?.pendingAiCount || 0 }}</strong>
+        </section>
+        <section class="settings-row compact">
+          <span>AI 失败</span>
+          <strong>{{ settings?.failedAiCount || 0 }}</strong>
+        </section>
 
         <el-form label-position="top" class="ai-form" @submit.prevent>
           <el-form-item label="Qwen API Key">
@@ -99,36 +117,24 @@ function syncStatusLabel(status: SyncRunResponse['status']) {
           </el-form-item>
         </el-form>
 
-        <section class="settings-row compact">
-          <span>配置状态</span>
-          <el-tag :type="settings?.aiConfigured ? 'success' : 'info'">
-            {{ settings?.aiConfigured ? '已配置' : '未配置' }}
-          </el-tag>
-        </section>
-        <section class="settings-row compact">
-          <span>AI 待处理</span>
-          <strong>{{ settings?.pendingAiCount || 0 }}</strong>
-        </section>
-        <section class="settings-row compact">
-          <span>AI 失败</span>
-          <strong>{{ settings?.failedAiCount || 0 }}</strong>
-        </section>
-
         <section class="settings-actions">
           <el-button type="primary" :loading="saving" @click="save">保存并测试</el-button>
-          <el-button :loading="testingAi" @click="$emit('testAi')">测试连接</el-button>
           <el-button type="danger" plain :disabled="!settings?.aiConfigured" :loading="saving" @click="$emit('clearAiKey')">清除 API Key</el-button>
         </section>
       </section>
 
-      <section class="settings-actions">
-        <el-button type="primary" plain :loading="isAiActionLoading(activeAiAction, 'ALL_PENDING')" :disabled="isAiActionDisabled(activeAiAction, 'ALL_PENDING')" @click="$emit('organizePending')">分类全部待分类帖子</el-button>
-        <el-button plain type="danger" :icon="CircleClose" :loading="aiCancelling" :disabled="!aiTask?.id || !activeAiAction || activeAiAction === 'CURRENT'" @click="$emit('cancelAiTask')">中断分类</el-button>
-        <span v-if="aiTask">{{ aiTaskProgressText(aiTask) }}</span>
+      <section class="settings-note">
+        <h3>当前 AI 任务进度</h3>
+        <div class="settings-actions">
+          <el-button type="primary" plain :loading="isAiActionLoading(activeAiAction, 'ALL_PENDING')" :disabled="isAiActionDisabled(activeAiAction, 'ALL_PENDING')" @click="$emit('organizePending')">分类全部待分类帖子</el-button>
+          <el-button plain type="danger" :icon="CircleClose" :loading="aiCancelling" :disabled="!aiTask?.id || !activeAiAction || activeAiAction === 'CURRENT'" @click="$emit('cancelAiTask')">中断分类</el-button>
+        </div>
+        <p v-if="aiTask">{{ aiTaskProgressText(aiTask) }}</p>
+        <p v-else>暂无正在运行的 AI 分类任务。</p>
       </section>
 
       <section class="settings-note">
-        <h3>最近同步</h3>
+        <h3>最近同步信息</h3>
         <p v-if="latestSyncRun">
           {{ syncStatusLabel(latestSyncRun.status) }} ·
           发现 {{ latestSyncRun.discoveredCount }} ·
@@ -142,11 +148,6 @@ function syncStatusLabel(status: SyncRunResponse['status']) {
           <p>{{ latestSyncRun.errorSummary }}</p>
         </details>
         <p v-if="!latestSyncRun">暂无同步记录。</p>
-      </section>
-
-      <section class="settings-note">
-        <h3>本地访问令牌</h3>
-        <p>写入设置和 Chrome 扩展导入都会使用后端的 `XHS_EXTENSION_TOKEN` 保护。</p>
       </section>
     </div>
   </el-dialog>
