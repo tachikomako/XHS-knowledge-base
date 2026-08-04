@@ -46,4 +46,9 @@ describe('AI task UI state', () => {
     expect(aiTaskProgressText(task({ scope: 'ALL_PENDING' }))).toContain('正在分类全部待整理帖子')
     expect(aiTaskProgressText(task({ scope: 'CURRENT', requestedCount: 1, total: 1 }))).toContain('正在分类当前帖子')
   })
+
+  it('describes cancelled tasks as interrupted', () => {
+    expect(aiTaskProgressText(task({ status: 'CANCELLED', processed: 1, succeeded: 1 })))
+      .toBe('AI 分类已中断 · 已处理 1 / 3 · 成功 1 · 失败 0')
+  })
 })

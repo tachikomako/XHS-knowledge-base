@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  cancelAiTask,
   clearItems,
   deleteItem,
   getAiTask,
@@ -89,16 +90,21 @@ describe('knowledge item API', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'task-1', status: 'QUEUED' }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'task-1', status: 'COMPLETED', processed: 2 }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'task-1', status: 'CANCELLED' }) })
     vi.stubGlobal('fetch', fetchMock)
 
     await organizeSelectedAi(['item/1', 'item/2'])
     await getAiTask('task-1')
+    await cancelAiTask('task-1')
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/ai/organize-tasks', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ itemIds: ['item/1', 'item/2'] }),
     }))
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/ai/organize-tasks/task-1', expect.any(Object))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/v1/ai/organize-tasks/task-1/cancel', expect.objectContaining({
+      method: 'POST',
+    }))
   })
 
   it('uses the backend error message when available', async () => {

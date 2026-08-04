@@ -31,4 +31,9 @@ public class AiController {
     public AiOrganizeTaskView organizeTask(@PathVariable String id) {
         return aiOrganizationService.task(id);
     }
+
+    @PostMapping("/organize-tasks/{id}/cancel")
+    public AiOrganizeTaskView cancelOrganizeTask(@PathVariable String id) {
+        return aiOrganizationService.cancelTask(id);
+    }
 }

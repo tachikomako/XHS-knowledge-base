@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Collection, Connection, Refresh, Search, Setting } from '@element-plus/icons-vue'
+import { CircleClose, Collection, Connection, Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { clearItems, deleteItem, getAiTask, getItem, organizeItem, organizePendingAi, organizeSelectedAi, searchItems, updateItem } from './api/items'
+import { cancelAiTask, clearItems, deleteItem, getAiTask, getItem, organizeItem, organizePendingAi, organizeSelectedAi, searchItems, updateItem } from './api/items'
 import type { AiOrganizeTask, KnowledgeItem } from './api/items'
 import { aiTaskProgressText, isAiActionDisabled, isAiActionLoading } from './aiTaskUi'
 import type { AiAction } from './aiTaskUi'
@@ -59,6 +59,7 @@ const settingsLoading = ref(false)
 const settingsSaving = ref(false)
 const aiTesting = ref(false)
 const activeAiAction = ref<AiAction>(null)
+const aiCancelling = ref(false)
 const aiTask = ref<AiOrganizeTask | null>(null)
 const selectedIds = ref<string[]>([])
 const settings = ref<SettingsResponse | null>(null)
@@ -275,6 +276,24 @@ async function watchAiTask(task: AiOrganizeTask) {
   pollAiTask(task.id)
 }
 
+async function cancelActiveAiTask() {
+  if (!aiTask.value?.id || !activeAiAction.value) return
+  aiCancelling.value = true
+  try {
+    aiPollController?.abort()
+    if (aiPollTimer !== null) window.clearTimeout(aiPollTimer)
+    aiTask.value = await cancelAiTask(aiTask.value.id)
+    activeAiAction.value = null
+    selectedIds.value = []
+    await Promise.all([loadItems(), loadMetadata(), loadSettings()])
+    ElMessage.warning(aiTask.value.message || 'AI 分类已中断')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '中断 AI 分类失败')
+  } finally {
+    aiCancelling.value = false
+  }
+}
+
 function pollAiTask(id: string) {
   if (aiPollTimer !== null) window.clearTimeout(aiPollTimer)
   aiPollTimer = window.setTimeout(async () => {
@@ -285,15 +304,16 @@ function pollAiTask(id: string) {
     try {
       const task = await getAiTask(id, controller.signal)
       aiTask.value = task
-      if (['COMPLETED', 'COMPLETED_WITH_ERRORS', 'REJECTED'].includes(task.status)) {
+      if (['COMPLETED', 'COMPLETED_WITH_ERRORS', 'REJECTED', 'CANCELLED'].includes(task.status)) {
         activeAiAction.value = null
         selectedIds.value = []
         await Promise.all([loadItems(), loadMetadata(), loadSettings()])
-        ElMessage[task.failed > 0 ? 'warning' : 'success'](task.message || 'AI 分类完成')
+        ElMessage[task.failed > 0 || task.status === 'CANCELLED' ? 'warning' : 'success'](task.message || 'AI 分类完成')
         return
       }
       pollAiTask(id)
     } catch (error) {
+      if (aiCancelling.value) return
       activeAiAction.value = null
       ElMessage.error(error instanceof Error ? error.message : '读取 AI 任务进度失败')
     } finally {
@@ -620,6 +640,7 @@ function replaceItem(updated: KnowledgeItem) {
         <span>AI 分类</span>
         <el-button size="large" plain :loading="isAiActionLoading(activeAiAction, 'SELECTED')" :disabled="isAiActionDisabled(activeAiAction, 'SELECTED')" @click="organizeSelected">分类所选帖子</el-button>
         <el-button size="large" type="primary" plain :loading="isAiActionLoading(activeAiAction, 'ALL_PENDING')" :disabled="isAiActionDisabled(activeAiAction, 'ALL_PENDING')" @click="organizePending">分类全部待分类帖子</el-button>
+        <el-button size="large" plain type="danger" :icon="CircleClose" :loading="aiCancelling" :disabled="!aiTask?.id || !activeAiAction || activeAiAction === 'CURRENT'" @click="cancelActiveAiTask">中断分类</el-button>
         <span v-if="aiTask" class="ai-progress">{{ aiTaskProgressText(aiTask) }}</span>
       </div>
     </section>
@@ -726,12 +747,14 @@ function replaceItem(updated: KnowledgeItem) {
       :saving="settingsSaving"
       :testing-ai="aiTesting"
       :active-ai-action="activeAiAction"
+      :ai-cancelling="aiCancelling"
       :ai-task="aiTask"
       @reload="loadSettings"
       @save-ai="saveAiSettings"
       @test-ai="testAi"
       @clear-ai-key="clearAiKey"
       @organize-pending="organizePending"
+      @cancel-ai-task="cancelActiveAiTask"
     />
   </main>
 </template>

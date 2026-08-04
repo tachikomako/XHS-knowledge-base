@@ -146,6 +146,19 @@ public class AiOrganizationService {
         return state.view();
     }
 
+    public AiOrganizeTaskView cancelTask(String id) {
+        AiTaskState state = tasks.get(id);
+        if (state == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "AI_TASK_NOT_FOUND", "AI task not found");
+        }
+        if (!state.terminal()) {
+            state.cancelRequested = true;
+            state.status = "CANCELLED";
+            state.message = "AI 分类已中断";
+        }
+        return state.view();
+    }
+
     @PreDestroy
     void shutdown() {
         taskExecutor.shutdownNow();
@@ -204,9 +217,11 @@ public class AiOrganizationService {
     }
 
     private void runTask(AiTaskState state, List<String> itemIds) {
+        if (state.cancelRequested) return;
         state.status = "RUNNING";
         for (int start = 0; start < itemIds.size(); start += TASK_BATCH_SIZE) {
             for (String itemId : itemIds.subList(start, Math.min(start + TASK_BATCH_SIZE, itemIds.size()))) {
+                if (state.cancelRequested) return;
                 try {
                     markProcessing(itemId);
                     organizeNow(itemId);
@@ -218,6 +233,7 @@ public class AiOrganizationService {
                 } finally {
                     state.processed++;
                 }
+                if (state.cancelRequested) return;
             }
         }
         state.status = state.failed > 0 ? "COMPLETED_WITH_ERRORS" : "COMPLETED";
@@ -413,6 +429,7 @@ public class AiOrganizationService {
         private volatile int processed;
         private volatile int succeeded;
         private volatile int failed;
+        private volatile boolean cancelRequested;
         private volatile String message = "任务已创建";
 
         private AiTaskState(String id, String scope, int requestedCount, int total) {
@@ -424,6 +441,10 @@ public class AiOrganizationService {
 
         private AiOrganizeTaskView view() {
             return new AiOrganizeTaskView(id, status, scope, requestedCount, total, processed, succeeded, failed, List.copyOf(errors), message);
+        }
+
+        private boolean terminal() {
+            return List.of("COMPLETED", "COMPLETED_WITH_ERRORS", "REJECTED", "CANCELLED").contains(status);
         }
     }
 
