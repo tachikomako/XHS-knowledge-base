@@ -107,7 +107,7 @@ async function importItems(payload) {
 
 async function startManualSync(payload) {
   const requestedSources = normalizeSources(payload?.sources)
-  if (requestedSources.length === 0) throw new Error('请至少选择收藏或点赞')
+  if (requestedSources.length === 0) throw new Error('请至少选择收藏')
 
   const settings = await chrome.storage.local.get(Object.keys(DEFAULT_SETTINGS))
   const backendUrl = normalizeBaseUrl(settings.backendUrl || DEFAULT_SETTINGS.backendUrl)
@@ -359,15 +359,15 @@ function withDefaultToken(settings) {
 
 function normalizeSources(value) {
   const sources = Array.isArray(value) ? value : []
-  return [...new Set(sources.filter((source) => ['FAVORITE', 'LIKED'].includes(source)))]
+  return [...new Set(sources.filter((source) => source === 'FAVORITE'))]
 }
 
-function profileTabUrl(currentUrl, source) {
+function profileTabUrl(currentUrl) {
   const url = new URL(currentUrl)
   if (url.hostname !== 'www.xiaohongshu.com' || !url.pathname.startsWith('/user/profile/')) {
     throw new Error('请先打开小红书个人主页')
   }
-  url.searchParams.set('tab', source === 'LIKED' ? 'liked' : 'fav')
+  url.searchParams.set('tab', 'fav')
   url.searchParams.set('subTab', 'note')
   url.hash = ''
   return url.toString()
@@ -417,7 +417,7 @@ function syncHeaders(extensionToken) {
 }
 
 function sourceLabel(source) {
-  return source === 'LIKED' ? '点赞' : '收藏'
+  return source === 'FAVORITE' ? '收藏' : source
 }
 
 function contentCandidateLabel(item) {

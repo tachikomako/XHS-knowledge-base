@@ -16,8 +16,6 @@ const openButton = document.querySelector('#openKnowledgeBase')
 const captureButton = document.querySelector('#captureButton')
 const startSyncButton = document.querySelector('#startSyncButton')
 const syncRescanButton = document.querySelector('#syncRescanButton')
-const sourceFavorite = document.querySelector('#sourceFavorite')
-const sourceLiked = document.querySelector('#sourceLiked')
 const completeFavoriteContent = document.querySelector('#completeFavoriteContent')
 const syncResult = document.querySelector('#syncResult')
 const latestSync = document.querySelector('#latestSync')
@@ -81,7 +79,7 @@ captureButton.addEventListener('click', async () => {
 startSyncButton.addEventListener('click', async () => {
   const sources = selectedSources()
   if (sources.length === 0) {
-    renderSyncResult('请至少选择收藏或点赞', 'error')
+    renderSyncResult('请打开小红书个人主页后同步收藏', 'error')
     return
   }
   if (completeFavoriteContent.checked && sources.includes('FAVORITE')) {
@@ -105,8 +103,6 @@ startSyncButton.addEventListener('click', async () => {
   }
 })
 
-sourceFavorite.addEventListener('change', updateSyncButton)
-sourceLiked.addEventListener('change', updateSyncButton)
 syncRescanButton.addEventListener('click', scanBatchPanel)
 rescanButton.addEventListener('click', inspectCurrentPage)
 
@@ -163,14 +159,14 @@ async function inspectCurrentPage() {
         ? `识别到 ${response.postCount} 条帖子`
         : '已识别小红书页面'
       captureMeta.textContent = response.postCount
-        ? '当前为普通信息流，仅展示识别结果；不会同步点赞、主页或信息流'
+        ? '当前为普通信息流，仅展示识别结果；不会同步主页或信息流'
         : '当前页面暂未加载帖子，可滚动页面后重新扫描'
       captureButton.textContent = '当前页面仅识别'
     } else if (response.pageType === 'LIKED') {
       currentExtraction = null
-      captureTitle.textContent = '已识别点赞页面'
-      captureMeta.textContent = '可在上方选择“我的点赞”并开始同步'
-      captureButton.textContent = '使用上方手动同步'
+      captureTitle.textContent = '当前页面不再支持同步'
+      captureMeta.textContent = '请打开个人主页的“收藏”标签后同步'
+      captureButton.textContent = '仅支持收藏同步'
     } else {
       throw new Error('当前页面类型暂不支持')
     }
@@ -208,16 +204,11 @@ async function scanBatchPanel() {
       renderDiagnostics(response.stats || {}, response.extractorVersion, 'FAVORITES_PAGE')
       return
     }
-    if (response.pageType === 'LIKED') {
-      renderSyncResult(`已识别点赞页面，当前发现 ${response.stats?.extracted ?? response.postCount ?? 0} 篇帖子`, 'success')
-      renderDiagnostics(response.stats || {}, response.extractorVersion, 'LIKED_PAGE')
-      return
-    }
     if (response.pageType === 'CURRENT_POST') {
-      renderSyncResult('已识别单篇帖子；批量同步请打开个人主页的收藏或点赞页面', 'error')
+      renderSyncResult('已识别单篇帖子；批量同步请打开个人主页的收藏页面', 'error')
       return
     }
-    renderSyncResult(response.reason || '未识别到收藏或点赞列表，请打开个人主页对应标签后重试', 'error')
+    renderSyncResult(response.reason || '未识别到收藏列表，请打开个人主页收藏标签后重试', 'error')
   } catch (error) {
     renderSyncResult(error instanceof Error ? error.message : '重新扫描失败', 'error')
   } finally {
@@ -350,10 +341,7 @@ function renderSyncResult(message, type) {
 }
 
 function selectedSources() {
-  return [
-    sourceFavorite.checked ? 'FAVORITE' : null,
-    sourceLiked.checked ? 'LIKED' : null,
-  ].filter(Boolean)
+  return ['FAVORITE']
 }
 
 function updateSyncButton() {

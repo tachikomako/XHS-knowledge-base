@@ -30,8 +30,8 @@ function reviewStatus(item: KnowledgeItem) {
 
 function sourceLabel(item: KnowledgeItem) {
   const relations = item.sourceRelations || []
-  if (relations.includes('FAVORITE') && relations.includes('LIKED')) return '收藏 + 点赞'
-  if (relations.includes('LIKED')) return '点赞'
+  if (relations.includes('FAVORITE') && relations.includes('LIKED')) return '收藏（含历史点赞）'
+  if (relations.includes('LIKED')) return '历史点赞'
   if (relations.includes('FAVORITE')) return '收藏'
   return item.sourceType === 'XIAOHONGSHU' ? '小红书' : item.sourceType
 }
