@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -227,6 +228,93 @@ class AiOrganizationServiceTest {
                 .andExpect(jsonPath("$.scope").value("SELECTED"))
                 .andExpect(jsonPath("$.requestedCount").value(3))
                 .andExpect(jsonPath("$.total").value(3));
+    }
+
+    @Test
+    void selectedTaskCanReorganizeCompletedItemsAndCallsQwenForScheduledItems() throws Exception {
+        enableAi();
+        String categoryId = insertCategory("AI");
+        insertItem("selected-completed-1", "COMPLETED", "COMPLETED", 0);
+        insertItem("selected-completed-2", "COMPLETED", "COMPLETED", 0);
+        insertItem("selected-completed-3", "COMPLETED", "COMPLETED", 0);
+        when(qwenClient.configured()).thenReturn(true);
+        when(qwenClient.organize(anyString())).thenReturn(new QwenAiResult(
+                "Reorganized summary",
+                categoryId,
+                List.of(),
+                List.of(),
+                0.8
+        ));
+
+        String taskId = objectMapper.readTree(mockMvc.perform(post("/api/v1/ai/organize-tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"itemIds":["selected-completed-1","selected-completed-2","selected-completed-3"]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scope").value("SELECTED"))
+                .andExpect(jsonPath("$.requestedCount").value(3))
+                .andExpect(jsonPath("$.total").value(3))
+                .andExpect(jsonPath("$.skipped").value(0))
+                .andReturn().getResponse().getContentAsString()).path("id").asText();
+
+        waitForTask(taskId);
+        verify(qwenClient, times(3)).organize(anyString());
+    }
+
+    @Test
+    void selectedTaskReportsSkippedItemsAndNeverExecutesThem() throws Exception {
+        enableAi();
+        String categoryId = insertCategory("AI");
+        insertItem("selected-ready-1", "COMPLETED", "COMPLETED", 0);
+        insertItem("selected-processing", "COMPLETED", "PROCESSING", 0);
+        insertItem("selected-locked", "COMPLETED", "COMPLETED", 1);
+        when(qwenClient.configured()).thenReturn(true);
+        when(qwenClient.organize(anyString())).thenReturn(new QwenAiResult(
+                "Ready summary",
+                categoryId,
+                List.of(),
+                List.of(),
+                0.8
+        ));
+
+        String taskId = objectMapper.readTree(mockMvc.perform(post("/api/v1/ai/organize-tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"itemIds":["selected-ready-1","selected-processing","selected-locked"]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requestedCount").value(3))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.skipped").value(2))
+                .andExpect(jsonPath("$.errors.length()").value(2))
+                .andReturn().getResponse().getContentAsString()).path("id").asText();
+
+        waitForTask(taskId);
+        verify(qwenClient, times(1)).organize(anyString());
+    }
+
+    @Test
+    void rejectsSelectedTaskWithoutStartingExecutorWhenNothingIsSchedulable() throws Exception {
+        enableAi();
+        insertItem("selected-processing-only", "COMPLETED", "PROCESSING", 0);
+        insertItem("selected-locked-only", "COMPLETED", "COMPLETED", 1);
+        when(qwenClient.configured()).thenReturn(true);
+
+        mockMvc.perform(post("/api/v1/ai/organize-tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"itemIds":["selected-processing-only","selected-locked-only","missing-item"]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").doesNotExist())
+                .andExpect(jsonPath("$.status").value("REJECTED"))
+                .andExpect(jsonPath("$.requestedCount").value(3))
+                .andExpect(jsonPath("$.total").value(0))
+                .andExpect(jsonPath("$.skipped").value(3))
+                .andExpect(jsonPath("$.errors.length()").value(3));
+
+        verify(qwenClient, times(0)).organize(anyString());
     }
 
     @Test

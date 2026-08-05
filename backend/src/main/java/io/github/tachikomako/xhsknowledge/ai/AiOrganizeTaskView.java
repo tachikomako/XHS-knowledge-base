@@ -11,6 +11,7 @@ public record AiOrganizeTaskView(
         int processed,
         int succeeded,
         int failed,
+        int skipped,
         List<String> errors,
         String message
 ) {
