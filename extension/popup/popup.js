@@ -1,4 +1,5 @@
 import { withTimeout } from './popup-core.js'
+import { setupBeginnerGuide } from './beginner-guide.js'
 
 const EXTENSION_BUILD = 'ae649ff'
 const DEFAULT_SETTINGS = Object.freeze({
@@ -29,6 +30,8 @@ const diagnosticPanel = document.querySelector('#diagnosticPanel')
 const diagnosticText = document.querySelector('#diagnosticText')
 const copyDiagnostics = document.querySelector('#copyDiagnostics')
 const extensionBuild = document.querySelector('#extensionBuild')
+
+setupBeginnerGuide()
 
 let currentExtraction = null
 

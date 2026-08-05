@@ -110,7 +110,7 @@ onMounted(() => {
   void loadMetadata()
   void loadSettings()
   void loadUnifiedTags()
-  if (localStorage.getItem('shiyé-help-seen') !== 'true') helpVisible.value = true
+  if (localStorage.getItem('shiyé-onboarding-seen') !== 'true') helpVisible.value = true
 })
 
 onBeforeUnmount(() => {
@@ -277,7 +277,7 @@ function openHelp() {
 
 function closeHelp(value: boolean) {
   helpVisible.value = value
-  if (!value) localStorage.setItem('shiyé-help-seen', 'true')
+  if (!value) localStorage.setItem('shiyé-onboarding-seen', 'true')
 }
 
 function openTaxonomyFromHelp() {
@@ -631,7 +631,7 @@ function replaceItem(updated: KnowledgeItem) {
       <div class="header-actions">
         <button class="header-text-button" type="button" @click="openHelp">
           <el-icon><Collection /></el-icon>
-          <span>帮助中心</span>
+          <span>新手提示</span>
         </button>
         <button class="health-pill" :class="{ online: health }" type="button" @click="checkHealth">
           <el-icon :class="{ spinning: healthLoading }"><Refresh v-if="healthLoading" /><Connection v-else /></el-icon>

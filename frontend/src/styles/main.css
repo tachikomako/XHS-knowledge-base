@@ -142,6 +142,11 @@ button, input, textarea { font: inherit; }
 .help-status span { color: var(--color-text-muted); }
 .help-status strong { color: var(--color-primary-dark); }
 .help-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.guide-section { padding: 13px 14px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-muted); }
+.guide-section + .guide-section { margin-top: 10px; }
+.guide-section summary { color: var(--color-primary-dark); cursor: pointer; font-weight: 700; }
+.guide-section p { margin: 9px 0 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.7; }
+.guide-section pre { margin: 10px 0 0; padding: 11px 12px; overflow-x: auto; border-radius: 7px; color: #e8eee4; background: #344238; font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
 
 .library-body {
   display: grid;
