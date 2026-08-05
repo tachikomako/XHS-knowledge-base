@@ -27,4 +27,9 @@ describe('分类与标签入口', () => {
     expect(styles).not.toContain('.tag-manager-list')
     expect(styles).not.toContain('grid-template-columns: 1fr 1fr;')
   })
+
+  it('标签输入使用远程搜索并以名称作为 option 值', () => {
+    expect(app).toContain('remote :remote-method="searchUnifiedTags"')
+    expect(app).toContain(':label="tag.name" :value="tag.name"')
+  })
 })

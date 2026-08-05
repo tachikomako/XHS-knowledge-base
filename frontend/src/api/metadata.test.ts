@@ -75,7 +75,7 @@ describe('metadata API', () => {
   it('loads the unified read-only tag view', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => [] })
     vi.stubGlobal('fetch', fetchMock)
-    await fetchUnifiedTags()
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/tags?view=unified', expect.anything())
+    await fetchUnifiedTags('体态')
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/tags?view=unified&query=%E4%BD%93%E6%80%81', expect.anything())
   })
 })
