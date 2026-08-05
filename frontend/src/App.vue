@@ -22,6 +22,7 @@ import { clearAiCredentials, fetchLatestSyncRun, fetchSettings, testAiConnection
 import type { AiSettingsUpdate } from './api/settings'
 import type { SettingsResponse, SyncRunResponse } from './api/settings'
 import KnowledgeCard from './components/KnowledgeCard.vue'
+import HelpCenterDialog from './components/HelpCenterDialog.vue'
 import KnowledgeDetailDrawer from './components/KnowledgeDetailDrawer.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
 import TaxonomyDialog from './components/TaxonomyDialog.vue'
@@ -50,6 +51,7 @@ const categorySuggestions = ref<CategorySuggestion[]>([])
 const taxonomyVisible = ref(false)
 const taxonomyLoading = ref(false)
 const taxonomySuggesting = ref(false)
+const helpVisible = ref(false)
 const settingsVisible = ref(false)
 const settingsLoading = ref(false)
 const settingsSaving = ref(false)
@@ -104,6 +106,7 @@ onMounted(() => {
   void loadItems()
   void loadMetadata()
   void loadSettings()
+  if (localStorage.getItem('shiyé-help-seen') !== 'true') helpVisible.value = true
 })
 
 onBeforeUnmount(() => {
@@ -248,6 +251,25 @@ async function clearAiKey() {
 function openAiSettings() {
   settingsVisible.value = true
   void loadSettings()
+}
+
+function openHelp() {
+  helpVisible.value = true
+}
+
+function closeHelp(value: boolean) {
+  helpVisible.value = value
+  if (!value) localStorage.setItem('shiyé-help-seen', 'true')
+}
+
+function openTaxonomyFromHelp() {
+  closeHelp(false)
+  taxonomyVisible.value = true
+}
+
+function openAiSettingsFromHelp() {
+  closeHelp(false)
+  openAiSettings()
 }
 
 async function ensureAiConfigured() {
@@ -588,6 +610,10 @@ function replaceItem(updated: KnowledgeItem) {
         <div><strong>拾叶</strong><span>XHS KNOWLEDGE</span></div>
       </div>
       <div class="header-actions">
+        <button class="header-text-button" type="button" @click="openHelp">
+          <el-icon><Collection /></el-icon>
+          <span>帮助中心</span>
+        </button>
         <button class="health-pill" :class="{ online: health }" type="button" @click="checkHealth">
           <el-icon :class="{ spinning: healthLoading }"><Refresh v-if="healthLoading" /><Connection v-else /></el-icon>
           <span>{{ health ? '本地服务已连接' : healthError || '后端未连接' }}</span>
@@ -729,6 +755,15 @@ function replaceItem(updated: KnowledgeItem) {
       @clear-ai-key="clearAiKey"
       @organize-pending="organizePending"
       @cancel-ai-task="cancelActiveAiTask"
+    />
+
+    <HelpCenterDialog
+      :model-value="helpVisible"
+      :health="health"
+      :ai-configured="settings?.aiConfigured ?? null"
+      @update:model-value="closeHelp"
+      @open-ai-settings="openAiSettingsFromHelp"
+      @open-taxonomy="openTaxonomyFromHelp"
     />
   </main>
 </template>
