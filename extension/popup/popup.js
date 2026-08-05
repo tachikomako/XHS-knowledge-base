@@ -16,6 +16,7 @@ const openButton = document.querySelector('#openKnowledgeBase')
 const captureButton = document.querySelector('#captureButton')
 const startSyncButton = document.querySelector('#startSyncButton')
 const syncRescanButton = document.querySelector('#syncRescanButton')
+const stopContentButton = document.querySelector('#stopContentButton')
 const completeFavoriteContent = document.querySelector('#completeFavoriteContent')
 const syncResult = document.querySelector('#syncResult')
 const latestSync = document.querySelector('#latestSync')
@@ -33,7 +34,7 @@ let currentExtraction = null
 
 extensionBuild.textContent = `Build ${EXTENSION_BUILD}`
 await loadSettings()
-await Promise.all([checkHealth(), inspectCurrentPage(), loadLatestSyncRun()])
+await Promise.all([checkHealth(), inspectCurrentPage(), loadLatestSyncRun(), loadContentCompletionState()])
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault()
@@ -83,7 +84,7 @@ startSyncButton.addEventListener('click', async () => {
     return
   }
   if (completeFavoriteContent.checked && sources.includes('FAVORITE')) {
-    const confirmed = window.confirm('补全正文需要逐篇打开收藏帖子，耗时较长。\n预计每 10 篇约需 3～5 分钟，实际时间取决于网络和页面加载速度。')
+    const confirmed = window.confirm('补全正文需要逐篇打开收藏帖子，耗时较长。\n收藏正文预计需要几分钟，图文帖子通常较快，视频帖子通常较慢，实际时间取决于网络和页面加载速度。同步过程中可以点击“停止补全正文”，已完成的内容会保留。')
     if (!confirmed) return
   }
   startSyncButton.disabled = true
@@ -100,6 +101,23 @@ startSyncButton.addEventListener('click', async () => {
     startSyncButton.disabled = false
     startSyncButton.removeAttribute('aria-busy')
     startSyncButton.textContent = '开始同步'
+    await loadContentCompletionState()
+  }
+})
+
+stopContentButton.addEventListener('click', async () => {
+  stopContentButton.disabled = true
+  stopContentButton.setAttribute('aria-busy', 'true')
+  stopContentButton.textContent = '正在停止…'
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'CANCEL_CONTENT_COMPLETION' })
+    if (!response?.ok) throw new Error(response?.error || '停止正文补全失败')
+    renderSyncResult('已请求停止正文补全，当前已完成内容会保留', 'success')
+  } catch (error) {
+    renderSyncResult(error instanceof Error ? error.message : '停止正文补全失败', 'error')
+  } finally {
+    stopContentButton.removeAttribute('aria-busy')
+    await loadContentCompletionState()
   }
 })
 
@@ -284,8 +302,10 @@ function renderImportResult(result) {
 function renderManualSyncResult(response) {
   const run = response.syncRun
   const result = response.result
-  const contentText = response.contentRequested || result.contentRequested
-    ? `正文 ${run.contentCompletedCount}/${run.contentCompletedCount + run.contentFailedCount}`
+  const contentText = response.contentCancelled
+    ? '正文补全已由用户中断'
+    : response.contentRequested || result.contentRequested
+      ? `正文 ${run.contentCompletedCount}/${run.contentCompletedCount + run.contentFailedCount}`
     : '正文：未请求'
   const message = [
     `发现 ${run.discoveredCount}`,
@@ -309,6 +329,20 @@ async function loadLatestSyncRun() {
   }
 }
 
+async function loadContentCompletionState() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_CONTENT_COMPLETION_STATE' })
+    const active = response?.ok && response.state?.status === 'RUNNING'
+    stopContentButton.hidden = !active
+    if (!active) {
+      stopContentButton.disabled = false
+      stopContentButton.textContent = '停止补全正文'
+    }
+  } catch {
+    stopContentButton.hidden = true
+  }
+}
+
 function renderLatestSync(run) {
   if (!run) {
     latestSync.textContent = '最近同步：暂无记录'
@@ -320,9 +354,11 @@ function renderLatestSync(run) {
     `新增 ${run.createdCount}`,
     `更新 ${run.updatedCount}`,
     `未变 ${run.unchangedCount}`,
-    run.contentCompletedCount + run.contentFailedCount > 0
-      ? `正文 ${run.contentCompletedCount}/${run.contentCompletedCount + run.contentFailedCount}`
-      : '正文：未请求',
+    run.errorSummary?.includes('正文补全由用户中断')
+      ? '正文补全已由用户中断'
+      : run.contentCompletedCount + run.contentFailedCount > 0
+        ? `正文 ${run.contentCompletedCount}/${run.contentCompletedCount + run.contentFailedCount}`
+        : '正文：未请求',
   ].filter(Boolean).join(' · ')
 }
 

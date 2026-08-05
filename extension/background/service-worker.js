@@ -12,6 +12,8 @@ const DEFAULT_SETTINGS = Object.freeze({
   knowledgeBaseUrl: 'http://127.0.0.1:5173',
   extensionToken: 'dev-local-token',
 })
+const CONTENT_COMPLETION_STATE_KEY = 'contentCompletionState'
+const CONTENT_COMPLETION_CANCEL_PREFIX = 'contentCompletionCancel:'
 
 chrome.runtime.onInstalled.addListener(async () => {
   const saved = await chrome.storage.local.get(Object.keys(DEFAULT_SETTINGS))
@@ -27,6 +29,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         ? startManualSync(message.payload)
         : message?.type === 'GET_LATEST_SYNC_RUN'
           ? latestSyncRun()
+          : message?.type === 'GET_CONTENT_COMPLETION_STATE'
+            ? contentCompletionState()
+            : message?.type === 'CANCEL_CONTENT_COMPLETION'
+              ? cancelContentCompletion(message.payload?.syncRunId)
           : message?.type === 'READ_XHS_ACCESS_CONTEXT'
             ? readAccessContexts(sender)
             : null
@@ -121,6 +127,7 @@ async function startManualSync(payload) {
   const summary = createImportSummary()
   const errors = []
   const completeFavoriteContent = requestedSources.includes('FAVORITE') && Boolean(payload?.completeFavoriteContent)
+  if (completeFavoriteContent) await clearContentCompletionState(syncRun.id)
   const diagnostics = {
     build: payload?.extensionBuild || 'unknown',
     started: 1,
@@ -135,6 +142,7 @@ async function startManualSync(payload) {
   let discoveredCount = 0
   let contentCompleted = 0
   let contentFailed = 0
+  let contentCancelled = false
   await updateSyncRun(backendUrl, extensionToken, syncRun.id, {
     status: 'RUNNING',
     errorSummary: syncDiagnostics(diagnostics, errors),
@@ -142,6 +150,11 @@ async function startManualSync(payload) {
 
   for (const source of requestedSources) {
     try {
+      if (completeFavoriteContent && await isContentCompletionCancelled(syncRun.id)) {
+        contentCancelled = true
+        errors.push('正文补全由用户中断')
+        break
+      }
       const targetUrl = profileTabUrl(tab.url, source)
       await navigateAndWait(tab.id, targetUrl)
       const discovery = await sendTabMessage(tab.id, { type: 'DISCOVER_XHS_LIST', source })
@@ -163,9 +176,13 @@ async function startManualSync(payload) {
       diagnostics.cardsImported = summary.received
 
       if (source === 'FAVORITE' && completeFavoriteContent) {
+        await chrome.storage.local.set({
+          [CONTENT_COMPLETION_STATE_KEY]: { syncRunId: syncRun.id, status: 'RUNNING' },
+        })
         const completedBeforeSource = contentCompleted
         const failedBeforeSource = contentFailed
         const completion = await completeMissingContent(tab.id, items, imported.result, discovery.extractorVersion, {
+          shouldCancel: () => isContentCompletionCancelled(syncRun.id),
           onProgress: async (progress) => {
             try {
               Object.assign(diagnostics, progress.diagnostics)
@@ -190,8 +207,13 @@ async function startManualSync(payload) {
         Object.assign(diagnostics, completion.diagnostics)
         contentCompleted += completion.completed
         contentFailed += completion.failed
+        contentCancelled = completion.cancelled
         diagnostics.contentFailed = contentFailed
         for (const error of completion.errors) errors.push(`${sourceLabel(source)}正文：${error}`)
+        if (contentCancelled) {
+          errors.push('正文补全由用户中断')
+          break
+        }
       }
       for (const warning of discovery.warnings || []) errors.push(`${sourceLabel(source)}：${warning}`)
     } catch (error) {
@@ -202,26 +224,31 @@ async function startManualSync(payload) {
   const failedSources = errors.filter((error) => !error.includes('重复卡片')).length
   const status = summary.received === 0
     ? 'FAILED'
-    : failedSources > 0 || summary.failed > 0 || contentFailed > 0
+    : contentCancelled || failedSources > 0 || summary.failed > 0 || contentFailed > 0
       ? 'PARTIAL_FAILED'
       : 'COMPLETED'
-  const updated = await updateSyncRun(backendUrl, extensionToken, syncRun.id, {
-    status,
-    discoveredCount,
-    processedCount: summary.received,
-    createdCount: summary.created,
-    updatedCount: summary.updated,
-    unchangedCount: summary.skipped,
-    contentCompletedCount: contentCompleted,
-    contentFailedCount: contentFailed,
-    aiCompletedCount: 0,
-    aiFailedCount: 0,
-    errorSummary: syncDiagnostics(diagnostics, errors),
-  })
+  let updated
+  try {
+    updated = await updateSyncRun(backendUrl, extensionToken, syncRun.id, {
+      status,
+      discoveredCount,
+      processedCount: summary.received,
+      createdCount: summary.created,
+      updatedCount: summary.updated,
+      unchangedCount: summary.skipped,
+      contentCompletedCount: contentCompleted,
+      contentFailedCount: contentFailed,
+      aiCompletedCount: 0,
+      aiFailedCount: 0,
+      errorSummary: syncDiagnostics(diagnostics, errors),
+    })
+  } finally {
+    if (completeFavoriteContent) await clearContentCompletionState(syncRun.id)
+  }
   summary.contentCompleted = contentCompleted
   summary.contentFailed = contentFailed
   summary.contentRequested = completeFavoriteContent
-  return { ok: status !== 'FAILED', result: summary, syncRun: updated, errors, contentRequested: completeFavoriteContent }
+  return { ok: status !== 'FAILED', result: summary, syncRun: updated, errors, contentRequested: completeFavoriteContent, contentCancelled }
 }
 
 async function completeMissingContent(tabId, discoveredItems, importResult, extractorVersion, options = {}) {
@@ -235,21 +262,31 @@ async function completeMissingContent(tabId, discoveredItems, importResult, extr
   const errors = []
   let completed = 0
   let failed = 0
+  let cancelled = false
 
   if (candidates.length === 0 && hasCompletableContentResults(importResult)) {
     errors.push('正文补全未启动：导入结果没有匹配到可补全条目')
-    return { completed, failed, errors, diagnostics }
+    return { completed, failed, errors, diagnostics, cancelled }
   }
 
   for (const batch of splitContentBatches(candidates, 5)) {
     for (const item of batch) {
+      if (await options.shouldCancel?.()) {
+        cancelled = true
+        break
+      }
       try {
-        await navigateAndWait(tabId, item.url)
+        await navigateAndWait(tabId, item.url, { shouldCancel: options.shouldCancel })
+        if (await options.shouldCancel?.()) throw new ContentCompletionCancelledError()
         diagnostics.detailPagesOpened++
-        const detail = await sendTabMessage(tabId, { type: 'INSPECT_XHS_PAGE' })
+        const detail = await awaitWithCancellation(
+          sendTabMessage(tabId, { type: 'INSPECT_XHS_PAGE' }),
+          options.shouldCancel,
+        )
         if (!detail?.ok || !detail.item) {
           throw new Error(detail?.error || `详情页 content script 未注入或无响应: ${detail?.code || 'NO_DETAIL_ITEM'}`)
         }
+        if (await options.shouldCancel?.()) throw new ContentCompletionCancelledError()
         if (detail.item.text) diagnostics.contentExtracted++
         const detailItem = {
           ...detail.item,
@@ -269,6 +306,10 @@ async function completeMissingContent(tabId, discoveredItems, importResult, extr
           errors.push(`${contentCandidateLabel(item)}：详情页已打开，但正文提取结果为空 (${detailDiagnostic})`)
         }
       } catch (error) {
+        if (error instanceof ContentCompletionCancelledError) {
+          cancelled = true
+          break
+        }
         failed++
         const message = summarizeContentFailure(error)
         errors.push(`${contentCandidateLabel(item)}：${message}`)
@@ -292,9 +333,16 @@ async function completeMissingContent(tabId, discoveredItems, importResult, extr
     if (typeof options.onProgress === 'function') {
       await options.onProgress({ completed, failed, errors: [...errors], diagnostics: { ...diagnostics } })
     }
+    if (cancelled) break
   }
 
-  return { completed, failed, errors, diagnostics }
+  return { completed, failed, errors, diagnostics, cancelled }
+}
+
+class ContentCompletionCancelledError extends Error {
+  constructor() {
+    super('Content completion cancelled by user')
+  }
 }
 
 async function createSyncRun(backendUrl, extensionToken, sources) {
@@ -318,6 +366,37 @@ async function latestSyncRun() {
   const backendUrl = normalizeBaseUrl(settings.backendUrl || DEFAULT_SETTINGS.backendUrl)
   const run = await requestJson(`${backendUrl}/api/v1/sync-runs/latest`, { headers: { Accept: 'application/json' } })
   return { ok: true, run }
+}
+
+function contentCompletionCancelKey(syncRunId) {
+  return `${CONTENT_COMPLETION_CANCEL_PREFIX}${syncRunId}`
+}
+
+async function isContentCompletionCancelled(syncRunId) {
+  const key = contentCompletionCancelKey(syncRunId)
+  const stored = await chrome.storage.local.get([key])
+  return stored[key] === true
+}
+
+async function clearContentCompletionState(syncRunId) {
+  await chrome.storage.local.remove(contentCompletionCancelKey(syncRunId))
+  const stored = await chrome.storage.local.get([CONTENT_COMPLETION_STATE_KEY])
+  if (!syncRunId || stored[CONTENT_COMPLETION_STATE_KEY]?.syncRunId === syncRunId) {
+    await chrome.storage.local.remove(CONTENT_COMPLETION_STATE_KEY)
+  }
+}
+
+async function contentCompletionState() {
+  const stored = await chrome.storage.local.get([CONTENT_COMPLETION_STATE_KEY])
+  return { ok: true, state: stored[CONTENT_COMPLETION_STATE_KEY] || null }
+}
+
+async function cancelContentCompletion(syncRunId) {
+  const stored = await chrome.storage.local.get([CONTENT_COMPLETION_STATE_KEY])
+  const activeSyncRunId = syncRunId || stored[CONTENT_COMPLETION_STATE_KEY]?.syncRunId
+  if (!activeSyncRunId) return { ok: false, error: '当前没有正在运行的正文补全' }
+  await chrome.storage.local.set({ [contentCompletionCancelKey(activeSyncRunId)]: true })
+  return { ok: true, syncRunId: activeSyncRunId }
 }
 
 async function requestJson(url, options = {}) {
@@ -373,26 +452,72 @@ function profileTabUrl(currentUrl) {
   return url.toString()
 }
 
-function navigateAndWait(tabId, url) {
+function navigateAndWait(tabId, url, options = {}) {
   return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
+    let settled = false
+    let cancelTimer = null
+    const cleanup = () => {
+      clearTimeout(timeoutId)
+      if (cancelTimer !== null) clearTimeout(cancelTimer)
       chrome.tabs.onUpdated.removeListener(listener)
-      reject(new Error('页面加载超时'))
+    }
+    const finish = (callback, value) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      callback(value)
+    }
+    const timeoutId = setTimeout(() => {
+      finish(reject, new Error('页面加载超时'))
     }, 30000)
     const listener = (updatedTabId, changeInfo) => {
       if (updatedTabId === tabId && changeInfo.status === 'complete') {
-        clearTimeout(timeoutId)
-        chrome.tabs.onUpdated.removeListener(listener)
-        setTimeout(resolve, 1200)
+        setTimeout(() => finish(resolve), 1200)
+      }
+    }
+    const checkCancellation = async () => {
+      try {
+        if (await options.shouldCancel?.()) {
+          finish(reject, new ContentCompletionCancelledError())
+          return
+        }
+        cancelTimer = setTimeout(checkCancellation, 500)
+      } catch (error) {
+        finish(reject, error)
       }
     }
     chrome.tabs.onUpdated.addListener(listener)
     chrome.tabs.update(tabId, { url }).catch((error) => {
-      clearTimeout(timeoutId)
-      chrome.tabs.onUpdated.removeListener(listener)
-      reject(error)
+      finish(reject, error)
     })
+    checkCancellation()
   })
+}
+
+async function awaitWithCancellation(promise, shouldCancel) {
+  if (typeof shouldCancel !== 'function') return promise
+  let timer = null
+  let rejectCancellation
+  const cancellation = new Promise((_, reject) => {
+    rejectCancellation = reject
+  })
+  const checkCancellation = async () => {
+    try {
+      if (await shouldCancel()) {
+        rejectCancellation(new ContentCompletionCancelledError())
+        return
+      }
+      timer = setTimeout(checkCancellation, 500)
+    } catch (error) {
+      rejectCancellation(error)
+    }
+  }
+  checkCancellation()
+  try {
+    return await Promise.race([promise, cancellation])
+  } finally {
+    if (timer !== null) clearTimeout(timer)
+  }
 }
 
 async function sendTabMessage(tabId, message) {
