@@ -12,6 +12,12 @@ export interface Tag {
   itemCount: number
 }
 
+export interface UnifiedTag {
+  name: string
+  usageCount: number
+  origins: Array<'SOURCE' | 'KNOWLEDGE'>
+}
+
 export interface CategoryInput {
   name: string
   parentId: string | null
@@ -65,6 +71,10 @@ export function deleteCategory(id: string): Promise<void> {
 
 export function fetchTags(signal?: AbortSignal): Promise<Tag[]> {
   return requestJson('/api/v1/tags', { signal })
+}
+
+export function fetchUnifiedTags(signal?: AbortSignal): Promise<UnifiedTag[]> {
+  return requestJson('/api/v1/tags?view=unified', { signal })
 }
 
 export function createTag(name: string): Promise<Tag> {

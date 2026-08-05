@@ -6,6 +6,7 @@ import {
   deleteTag,
   fetchCategories,
   fetchSourceTags,
+  fetchUnifiedTags,
   generateCategorySuggestions,
   mergeTag,
   updateCategory,
@@ -69,5 +70,12 @@ describe('metadata API', () => {
 
     await expect(deleteTag('tag-1')).resolves.toBeUndefined()
     await expect(createTag('重复')).rejects.toThrow('分类仍在使用')
+  })
+
+  it('loads the unified read-only tag view', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => [] })
+    vi.stubGlobal('fetch', fetchMock)
+    await fetchUnifiedTags()
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/tags?view=unified', expect.anything())
   })
 })

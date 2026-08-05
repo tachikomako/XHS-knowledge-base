@@ -14,10 +14,11 @@ import {
   fetchCategories,
   fetchSourceTags,
   fetchTags,
+  fetchUnifiedTags,
   generateCategorySuggestions,
   updateCategory,
 } from './api/metadata'
-import type { Category, CategoryInput, CategorySuggestion, SourceTag, Tag } from './api/metadata'
+import type { Category, CategoryInput, CategorySuggestion, SourceTag, Tag, UnifiedTag } from './api/metadata'
 import { clearAiCredentials, fetchLatestSyncRun, fetchSettings, testAiConnection, updateAiSettings } from './api/settings'
 import type { AiSettingsUpdate } from './api/settings'
 import type { SettingsResponse, SyncRunResponse } from './api/settings'
@@ -37,7 +38,7 @@ const page = ref(1)
 const queryInput = ref('')
 const appliedQuery = ref('')
 const categoryId = ref('')
-const tagId = ref('')
+const tagName = ref('')
 const listLoading = ref(false)
 const listError = ref('')
 const drawerVisible = ref(false)
@@ -46,6 +47,8 @@ const detailSaving = ref(false)
 const selectedItem = ref<KnowledgeItem | null>(null)
 const categories = ref<Category[]>([])
 const tags = ref<Tag[]>([])
+const unifiedTags = ref<UnifiedTag[]>([])
+const unifiedTagsLoading = ref(false)
 const sourceTags = ref<SourceTag[]>([])
 const categorySuggestions = ref<CategorySuggestion[]>([])
 const taxonomyVisible = ref(false)
@@ -71,8 +74,8 @@ let aiPollController: AbortController | null = null
 let aiPollTimer: number | null = null
 
 const tagNames = computed(() => Object.fromEntries(tags.value.map((tag) => [tag.id, tag.name])))
-const orderedTags = computed(() => [...tags.value].sort((left, right) => (
-  right.itemCount - left.itemCount || left.name.localeCompare(right.name, 'zh-CN')
+const orderedTags = computed(() => [...unifiedTags.value].sort((left, right) => (
+  right.usageCount - left.usageCount || left.name.localeCompare(right.name, 'zh-CN')
 )))
 const orderedCategories = computed(() => {
   const roots = categories.value.filter((category) => !category.parentId)
@@ -106,6 +109,7 @@ onMounted(() => {
   void loadItems()
   void loadMetadata()
   void loadSettings()
+  void loadUnifiedTags()
   if (localStorage.getItem('shiyé-help-seen') !== 'true') helpVisible.value = true
 })
 
@@ -118,7 +122,7 @@ onBeforeUnmount(() => {
   if (aiPollTimer !== null) window.clearTimeout(aiPollTimer)
 })
 
-watch([categoryId, tagId], () => {
+watch([categoryId, tagName], () => {
   page.value = 1
   void loadItems()
 })
@@ -133,7 +137,7 @@ async function loadItems() {
     const result = await searchItems({
       q: appliedQuery.value,
       categoryId: categoryId.value,
-      tagId: tagId.value,
+      tagName: tagName.value,
       page: page.value,
       pageSize: PAGE_SIZE,
     }, controller.signal)
@@ -166,6 +170,20 @@ async function loadMetadata() {
     ElMessage.error(error instanceof Error ? error.message : '无法加载分类与标签')
   } finally {
     if (metadataController === controller) taxonomyLoading.value = false
+  }
+}
+
+async function loadUnifiedTags() {
+  unifiedTagsLoading.value = true
+  try {
+    unifiedTags.value = await fetchUnifiedTags()
+  } catch (error) {
+    unifiedTags.value = []
+    if (!(error instanceof DOMException && error.name === 'AbortError')) {
+      ElMessage.warning('标签筛选暂时不可用')
+    }
+  } finally {
+    unifiedTagsLoading.value = false
   }
 }
 
@@ -381,7 +399,8 @@ function toggleSelect(item: KnowledgeItem) {
 }
 
 function filterByTag(selectedTagId: string) {
-  tagId.value = selectedTagId
+  const selectedTag = tags.value.find((tag) => tag.id === selectedTagId)
+  tagName.value = selectedTag?.name || selectedTagId
 }
 
 function selectCategory(selectedCategoryId: string) {
@@ -632,8 +651,8 @@ function replaceItem(updated: KnowledgeItem) {
 
     <section class="toolbar" aria-label="知识库筛选">
       <form class="search-form" @submit.prevent="applySearch">
-        <el-select v-model="tagId" clearable filterable size="large" placeholder="全部标签" aria-label="标签筛选">
-          <el-option v-for="tag in orderedTags" :key="tag.id" :label="`#${tag.name}`" :value="tag.id" />
+        <el-select v-model="tagName" clearable filterable :loading="unifiedTagsLoading" size="large" placeholder="全部标签" no-data-text="暂无标签" no-match-text="没有匹配的标签" aria-label="标签筛选">
+          <el-option v-for="tag in orderedTags" :key="tag.name" :label="`#${tag.name}`" :value="tag.name" />
         </el-select>
         <el-input v-model="queryInput" size="large" clearable placeholder="搜索标题、正文、摘要或笔记" :prefix-icon="Search" @clear="clearSearch" />
         <el-button native-type="submit" size="large" type="primary">搜索</el-button>

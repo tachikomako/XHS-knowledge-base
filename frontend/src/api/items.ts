@@ -42,6 +42,7 @@ export interface ItemSearchParams {
   q?: string
   categoryId?: string
   tagId?: string
+  tagName?: string
   sourceType?: string
   sourceScope?: SourceScope | ''
   captureLevel?: CaptureLevel | ''
@@ -94,6 +95,7 @@ export async function searchItems(
   appendIfPresent(query, 'q', params.q?.trim())
   appendIfPresent(query, 'categoryId', params.categoryId)
   appendIfPresent(query, 'tagId', params.tagId)
+  appendIfPresent(query, 'tagName', params.tagName)
   appendIfPresent(query, 'sourceType', params.sourceType)
   appendIfPresent(query, 'sourceScope', params.sourceScope)
   appendIfPresent(query, 'captureLevel', params.captureLevel)
