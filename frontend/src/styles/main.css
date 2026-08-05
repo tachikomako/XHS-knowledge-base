@@ -160,7 +160,7 @@ button, input, textarea { font: inherit; }
 .category-sidebar button:hover, .category-sidebar button.active { color: var(--color-primary-dark); background: #e8eee4; }
 .category-sidebar button.child { padding-left: 22px; color: #746d63; font-size: 12px; }
 .category-sidebar small { color: #918a80; }
-.source-scope-nav {
+.content-view-nav {
   display: grid;
   gap: 4px;
   margin-bottom: 8px;
