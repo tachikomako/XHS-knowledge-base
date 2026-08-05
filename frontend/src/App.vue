@@ -41,7 +41,6 @@ const queryInput = ref('')
 const appliedQuery = ref('')
 const categoryId = ref('')
 const tagId = ref('')
-const sourceScope = ref<'ALL' | 'FAVORITE'>('ALL')
 const listLoading = ref(false)
 const listError = ref('')
 const drawerVisible = ref(false)
@@ -97,6 +96,7 @@ const categoryTree = computed(() => orderedCategories.value
 
 const emptyDescription = computed(() => {
   if (appliedQuery.value) return `没有找到与“${appliedQuery.value}”相关的内容`
+  if (categoryId.value === '__pending__') return '当前没有待整理内容'
   return '安装扩展并剪藏第一篇小红书帖子吧'
 })
 
@@ -116,7 +116,7 @@ onBeforeUnmount(() => {
   if (aiPollTimer !== null) window.clearTimeout(aiPollTimer)
 })
 
-watch([categoryId, tagId, sourceScope], () => {
+watch([categoryId, tagId], () => {
   page.value = 1
   void loadItems()
 })
@@ -132,7 +132,6 @@ async function loadItems() {
       q: appliedQuery.value,
       categoryId: categoryId.value,
       tagId: tagId.value,
-      sourceScope: sourceScope.value,
       page: page.value,
       pageSize: PAGE_SIZE,
     }, controller.signal)
@@ -366,11 +365,6 @@ function filterByTag(selectedTagId: string) {
 
 function selectCategory(selectedCategoryId: string) {
   categoryId.value = selectedCategoryId
-}
-
-function selectSource(nextSourceScope: 'ALL' | 'FAVORITE') {
-  sourceScope.value = nextSourceScope
-  categoryId.value = ''
 }
 
 function applySearch() {
@@ -690,9 +684,8 @@ function replaceItem(updated: KnowledgeItem) {
 
     <section class="library-body">
       <aside class="category-sidebar" aria-label="分类树">
-        <div class="source-scope-nav">
-          <button type="button" :class="{ active: sourceScope === 'ALL' && categoryId !== '__pending__' }" @click="selectSource('ALL')">所有内容</button>
-          <button type="button" :class="{ active: sourceScope === 'FAVORITE' && categoryId !== '__pending__' }" @click="selectSource('FAVORITE')">我的收藏</button>
+        <div class="content-view-nav">
+          <button type="button" :class="{ active: categoryId !== '__pending__' }" @click="selectCategory('')">所有内容</button>
           <button type="button" :class="{ active: categoryId === '__pending__' }" @click="selectCategory('__pending__')">待整理</button>
         </div>
         <div v-for="category in categoryTree" :key="category.id" class="category-branch">
