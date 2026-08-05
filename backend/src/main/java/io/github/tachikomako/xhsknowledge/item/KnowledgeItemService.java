@@ -39,6 +39,7 @@ public class KnowledgeItemService {
             String query,
             String categoryId,
             String tagId,
+            String tagName,
             String sourceType,
             String sourceScope,
             String captureLevel,
@@ -80,6 +81,18 @@ public class KnowledgeItemService {
                     "EXISTS (SELECT 1 FROM knowledge_item_tags kit WHERE kit.item_id = knowledge_items.id AND kit.tag_id = {0})",
                     tagId
             );
+        }
+        if (StringUtils.hasText(tagName)) {
+            String normalizedTagName = normalizeTagName(tagName);
+            if (normalizedTagName.length() > 50) throw badRequest("INVALID_FILTER", "tagName is too long");
+            wrapper.apply("""
+                    (EXISTS (SELECT 1 FROM knowledge_item_tags kit JOIN tags t ON t.id = kit.tag_id
+                             WHERE kit.item_id = knowledge_items.id
+                               AND lower(trim(replace(t.name, '#', ''))) = {0})
+                     OR EXISTS (SELECT 1 FROM knowledge_item_source_tags kist
+                                WHERE kist.item_id = knowledge_items.id
+                                  AND lower(trim(replace(kist.value, '#', ''))) = {0}))
+                    """, normalizedTagName);
         }
         wrapper.eq(StringUtils.hasText(sourceType), KnowledgeItemEntity::getSourceType, sourceType);
         applySourceScope(wrapper, sourceScope);
@@ -315,6 +328,10 @@ public class KnowledgeItemService {
 
     private String trimToNull(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private String normalizeTagName(String value) {
+        return trimToNull(value).replaceFirst("^#+", "").trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     private ApiException badRequest(String code, String message) {

@@ -170,6 +170,24 @@ class MetadataIntegrationTest {
                 .andExpect(jsonPath("$[0].name").value("AI 与编程"));
     }
 
+    @Test
+    void unifiesSourceAndKnowledgeTagsWithoutDuplicatingUsage() throws Exception {
+        String itemId = importItemWithTags();
+        String knowledgeTagId = createTag("#ai");
+        replaceTags(itemId, knowledgeTagId);
+
+        mockMvc.perform(get("/api/v1/tags").param("view", "unified").param("query", "AI"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("AI"))
+                .andExpect(jsonPath("$[0].usageCount").value(1))
+                .andExpect(jsonPath("$[0].origins[0]").value("SOURCE"))
+                .andExpect(jsonPath("$[0].origins[1]").value("KNOWLEDGE"));
+
+        mockMvc.perform(get("/api/v1/items").param("tagName", "#ai"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1));
+    }
+
     private String createCategory(String name, String parentId) throws Exception {
         var request = objectMapper.createObjectNode().put("name", name).put("sortOrder", 0);
         if (parentId == null) request.putNull("parentId"); else request.put("parentId", parentId);

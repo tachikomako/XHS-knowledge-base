@@ -64,6 +64,45 @@ public class MetadataService {
         ));
     }
 
+    public List<UnifiedTagView> listUnifiedTags(String query) {
+        String normalizedQuery = normalizeTag(query);
+        return jdbcTemplate.query("""
+                SELECT normalized_name, MIN(display_name) AS display_name,
+                       COUNT(DISTINCT item_id) AS usage_count,
+                       MAX(CASE WHEN origin = 'SOURCE' THEN 1 ELSE 0 END) AS has_source,
+                       MAX(CASE WHEN origin = 'KNOWLEDGE' THEN 1 ELSE 0 END) AS has_knowledge
+                FROM (
+                    SELECT lower(trim(replace(value, '#', ''))) AS normalized_name,
+                           trim(replace(value, '#', '')) AS display_name,
+                           item_id, 'SOURCE' AS origin
+                    FROM knowledge_item_source_tags
+                    WHERE trim(replace(value, '#', '')) <> ''
+                    UNION ALL
+                    SELECT lower(trim(replace(name, '#', ''))) AS normalized_name,
+                           trim(replace(name, '#', '')) AS display_name,
+                           kit.item_id, 'KNOWLEDGE' AS origin
+                    FROM tags t
+                    JOIN knowledge_item_tags kit ON kit.tag_id = t.id
+                    WHERE trim(replace(name, '#', '')) <> ''
+                ) unified_tags
+                JOIN knowledge_items i ON i.id = unified_tags.item_id
+                WHERE i.lifecycle_status = 'ACTIVE'
+                  AND (? IS NULL OR normalized_name LIKE '%' || ? || '%')
+                GROUP BY normalized_name
+                ORDER BY usage_count DESC, lower(display_name)
+                LIMIT 100
+                """, (result, row) -> {
+            List<String> origins = new java.util.ArrayList<>();
+            if (result.getInt("has_source") == 1) origins.add("SOURCE");
+            if (result.getInt("has_knowledge") == 1) origins.add("KNOWLEDGE");
+            return new UnifiedTagView(
+                    result.getString("display_name"),
+                    result.getLong("usage_count"),
+                    origins
+            );
+        }, normalizedQuery, normalizedQuery);
+    }
+
     public List<SourceTagView> listSourceTags() {
         return jdbcTemplate.query("""
                 SELECT value, COUNT(DISTINCT item_id) AS item_count
@@ -352,7 +391,7 @@ public class MetadataService {
     }
 
     private String normalizeTag(String name) {
-        return name.toLowerCase(Locale.ROOT);
+        return name == null ? null : name.replaceFirst("^#+", "").trim().toLowerCase(Locale.ROOT);
     }
 
     private String trimToNull(String value) {
