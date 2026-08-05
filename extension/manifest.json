@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "小红书个人知识库",
-  "description": "将用户主动访问的小红书收藏保存到本地个人知识库。",
+  "name": "拾叶 · 小红书收藏同步",
+  "description": "拾叶：将用户主动访问的小红书收藏保存到本地个人知识库。",
   "version": "0.3.1",
   "minimum_chrome_version": "120",
   "action": {
-    "default_title": "小红书个人知识库",
+    "default_title": "拾叶 · 小红书收藏同步",
     "default_popup": "popup/popup.html"
   },
   "background": {
