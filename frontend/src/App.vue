@@ -10,16 +10,12 @@ import type { AiAction } from './aiTaskUi'
 import {
   confirmCategorySuggestions,
   createCategory,
-  createTag,
   deleteCategory,
-  deleteTag,
   fetchCategories,
   fetchSourceTags,
   fetchTags,
   generateCategorySuggestions,
-  mergeTag as mergeTagApi,
   updateCategory,
-  updateTag,
 } from './api/metadata'
 import type { Category, CategoryInput, CategorySuggestion, SourceTag, Tag } from './api/metadata'
 import { clearAiCredentials, fetchLatestSyncRun, fetchSettings, testAiConnection, updateAiSettings } from './api/settings'
@@ -73,6 +69,9 @@ let aiPollController: AbortController | null = null
 let aiPollTimer: number | null = null
 
 const tagNames = computed(() => Object.fromEntries(tags.value.map((tag) => [tag.id, tag.name])))
+const orderedTags = computed(() => [...tags.value].sort((left, right) => (
+  right.itemCount - left.itemCount || left.name.localeCompare(right.name, 'zh-CN')
+)))
 const orderedCategories = computed(() => {
   const roots = categories.value.filter((category) => !category.parentId)
   const ordered = roots.flatMap((root) => [
@@ -463,10 +462,6 @@ async function confirmSuggestions(suggestions: CategorySuggestion[]) {
   if (updated) categorySuggestions.value = []
 }
 
-async function addTag(name: string) {
-  await mutateMetadata(() => createTag(name), '标签已添加')
-}
-
 async function editCategory(category: Category) {
   try {
     const result = await ElMessageBox.prompt('请输入新的分类名称', '重命名分类', {
@@ -501,37 +496,6 @@ async function moveCategory(category: Category, direction: -1 | 1) {
   }))), '分类排序已更新')
 }
 
-async function editTag(tag: Tag) {
-  try {
-    const result = await ElMessageBox.prompt('请输入新的标签名称', '重命名标签', {
-      inputValue: tag.name,
-      inputPattern: /\S/u,
-      inputErrorMessage: '标签名称不能为空',
-      confirmButtonText: '保存',
-      cancelButtonText: '取消',
-    })
-    await mutateMetadata(() => updateTag(tag.id, result.value), '标签已更新')
-  } catch (error) {
-    handleDialogError(error)
-  }
-}
-
-async function mergeTag(sourceTag: Tag, targetTagId: string) {
-  const targetTag = tags.value.find((tag) => tag.id === targetTagId)
-  if (!targetTag) return
-  try {
-    await ElMessageBox.confirm(`这会把 #${sourceTag.name} 的帖子关联合并到 #${targetTag.name}，并删除源标签。`, '合并标签？', {
-      confirmButtonText: '合并',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
-    const merged = await mutateMetadata(() => mergeTagApi(sourceTag.id, targetTagId), '标签已合并')
-    if (merged && tagId.value === sourceTag.id) tagId.value = targetTagId
-  } catch (error) {
-    handleDialogError(error)
-  }
-}
-
 async function removeCategory(category: Category) {
   try {
     await ElMessageBox.confirm('只有没有子分类和关联帖子的分类才能删除。', `删除“${category.name}”？`, {
@@ -541,20 +505,6 @@ async function removeCategory(category: Category) {
     })
     const deleted = await mutateMetadata(() => deleteCategory(category.id), '分类已删除')
     if (deleted && categoryId.value === category.id) categoryId.value = ''
-  } catch (error) {
-    handleDialogError(error)
-  }
-}
-
-async function removeTag(tag: Tag) {
-  try {
-    await ElMessageBox.confirm('删除标签会解除帖子关联，但不会删除帖子。', `删除 #${tag.name}？`, {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
-    const deleted = await mutateMetadata(() => deleteTag(tag.id), '标签已删除')
-    if (deleted && tagId.value === tag.id) tagId.value = ''
   } catch (error) {
     handleDialogError(error)
   }
@@ -656,14 +606,14 @@ function replaceItem(updated: KnowledgeItem) {
 
     <section class="toolbar" aria-label="知识库筛选">
       <form class="search-form" @submit.prevent="applySearch">
+        <el-select v-model="tagId" clearable filterable size="large" placeholder="全部标签" aria-label="标签筛选">
+          <el-option v-for="tag in orderedTags" :key="tag.id" :label="`#${tag.name}`" :value="tag.id" />
+        </el-select>
         <el-input v-model="queryInput" size="large" clearable placeholder="搜索标题、正文、摘要或笔记" :prefix-icon="Search" @clear="clearSearch" />
         <el-button native-type="submit" size="large" type="primary">搜索</el-button>
       </form>
       <div class="filter-row">
-        <el-select v-model="tagId" clearable filterable size="large" placeholder="全部标签" aria-label="标签筛选" style="width: 160px">
-          <el-option v-for="tag in tags" :key="tag.id" :label="`#${tag.name}`" :value="tag.id" />
-        </el-select>
-        <el-button size="large" :icon="Setting" @click="taxonomyVisible = true">管理</el-button>
+        <el-button size="large" :icon="Setting" @click="taxonomyVisible = true">分类管理</el-button>
         <el-button size="large" type="danger" plain @click="clearLibrary">清空知识库</el-button>
       </div>
       <div class="filter-row ai-actions">
@@ -751,7 +701,6 @@ function replaceItem(updated: KnowledgeItem) {
     <TaxonomyDialog
       v-model="taxonomyVisible"
       :categories="orderedCategories"
-      :tags="tags"
       :source-tags="sourceTags"
       :suggestions="categorySuggestions"
       :loading="taxonomyLoading"
@@ -759,13 +708,9 @@ function replaceItem(updated: KnowledgeItem) {
       @create-category="addCategory"
       @generate-suggestions="generateSuggestions"
       @confirm-suggestions="confirmSuggestions"
-      @create-tag="addTag"
       @edit-category="editCategory"
-      @edit-tag="editTag"
       @move-category="moveCategory"
-      @merge-tag="mergeTag"
       @delete-category="removeCategory"
-      @delete-tag="removeTag"
     />
 
     <SettingsDialog
