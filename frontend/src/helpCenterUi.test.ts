@@ -19,12 +19,16 @@ describe('帮助中心入口与首次引导', () => {
     expect(app).toContain("aiTask.value = null")
   })
 
-  it('复用同一个帮助内容并提供现有设置与分类入口', () => {
+  it('使用分页教程突出单个重点，不使用下拉或折叠内容', () => {
+    expect(help).toContain('const guidePages: GuidePage[]')
+    expect(help).toContain('上一步')
+    expect(help).toContain('下一步')
+    expect(help).toContain('help-page-nav')
+    expect(help).not.toContain('<details')
+    expect(help).not.toContain('<summary')
     expect(help).toContain('启动后端')
-    expect(help).toContain('启动前端')
-    expect(help).toContain('补全与中断正文')
-    expect(help).toContain('手动 AI 分类')
-    expect(help).toContain('标签与搜索')
+    expect(help).toContain('需要正文时，再补全正文')
+    expect(help).toContain('手动触发 AI 分类')
     expect(help).not.toContain('点赞同步')
     expect(help).not.toContain('同步后自动 AI')
     expect(help).toContain("openAiSettings: []")
