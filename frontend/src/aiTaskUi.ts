@@ -17,6 +17,8 @@ export function aiTaskScopeLabel(task: AiOrganizeTask) {
 }
 
 export function aiTaskProgressText(task: AiOrganizeTask) {
+  if (task.status === 'REJECTED') return task.message || '所选帖子当前不可分类'
   const label = task.status === 'CANCELLED' ? 'AI 分类已中断' : aiTaskScopeLabel(task)
-  return `${label} · 已处理 ${task.processed} / ${task.total} · 成功 ${task.succeeded} · 失败 ${task.failed}`
+  const skipped = task.skipped > 0 ? ` · 跳过 ${task.skipped}` : ''
+  return `${label} · 已处理 ${task.processed} / ${task.total} · 成功 ${task.succeeded} · 失败 ${task.failed}${skipped}`
 }

@@ -11,6 +11,7 @@ function task(overrides: Partial<AiOrganizeTask>): AiOrganizeTask {
     processed: 2,
     succeeded: 2,
     failed: 0,
+    skipped: 0,
     status: 'RUNNING',
     errors: [],
     message: null,
@@ -50,5 +51,14 @@ describe('AI task UI state', () => {
   it('describes cancelled tasks as interrupted', () => {
     expect(aiTaskProgressText(task({ status: 'CANCELLED', processed: 1, succeeded: 1 })))
       .toBe('AI 分类已中断 · 已处理 1 / 3 · 成功 1 · 失败 0')
+  })
+
+  it('describes rejected tasks without showing a fake 0 / 0 run', () => {
+    expect(aiTaskProgressText(task({
+      status: 'REJECTED',
+      total: 0,
+      skipped: 3,
+      message: '所选帖子当前不可分类',
+    }))).toBe('所选帖子当前不可分类')
   })
 })

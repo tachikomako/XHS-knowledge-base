@@ -81,6 +81,7 @@ export interface AiOrganizeTask {
   processed: number
   succeeded: number
   failed: number
+  skipped: number
   errors: string[]
   message: string | null
 }

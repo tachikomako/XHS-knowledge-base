@@ -18,6 +18,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -63,7 +64,9 @@ public class AiOrganizationService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "AI_NOT_CONFIGURED", "Qwen API key is not configured");
         }
         try {
-            markProcessing(itemId);
+            if (!markProcessing(itemId, true)) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "AI_ITEM_NOT_ELIGIBLE", "内容当前不可分类");
+            }
             organizeNow(itemId);
         } catch (ApiException exception) {
             markFailed(itemId, exception);
@@ -93,7 +96,11 @@ public class AiOrganizationService {
         for (String itemId : itemIds) {
             processed++;
             try {
-                markProcessing(itemId);
+                if (!markProcessing(itemId, false)) {
+                    failed++;
+                    errors.add("%s: 处理中或已被手动锁定".formatted(itemId));
+                    continue;
+                }
                 organizeNow(itemId);
                 succeeded++;
             } catch (Exception exception) {
@@ -118,23 +125,32 @@ public class AiOrganizationService {
         if (!qwenClient.configured()) return rejectedTask(SCOPE_ALL_PENDING, 0, "请先在设置中配置并测试 Qwen API");
         List<String> itemIds = aiEligibilityService.eligibleItemIds(300);
         if (itemIds.isEmpty()) return rejectedTask(SCOPE_ALL_PENDING, 0, noEligibleMessage(aiEligibilityService.stats()));
-        return startTask(SCOPE_ALL_PENDING, itemIds.size(), itemIds);
+        return startTask(SCOPE_ALL_PENDING, itemIds.size(), new ScheduledItems(itemIds, 0, List.of()));
     }
 
     public AiOrganizeTaskView startTask(List<String> requestedItemIds) {
         int requestedCount = requestedIds(requestedItemIds).size();
         if (!settingsService.aiEnabled()) return rejectedTask(SCOPE_SELECTED, requestedCount, "AI 整理尚未开启");
         if (!qwenClient.configured()) return rejectedTask(SCOPE_SELECTED, requestedCount, "请先在设置中配置并测试 Qwen API");
-        List<String> itemIds = eligibleRequestedIds(requestedItemIds);
-        if (itemIds.isEmpty()) return rejectedTask(SCOPE_SELECTED, requestedCount, "没有可整理内容");
+        ScheduledItems scheduled = scheduleSelectedItems(requestedItemIds);
+        if (scheduled.itemIds().isEmpty()) {
+            return rejectedTask(SCOPE_SELECTED, requestedCount, scheduled.skipped(), "所选帖子当前不可分类", scheduled.errors());
+        }
 
-        return startTask(SCOPE_SELECTED, requestedCount, itemIds);
+        return startTask(SCOPE_SELECTED, requestedCount, scheduled);
     }
 
-    private AiOrganizeTaskView startTask(String scope, int requestedCount, List<String> itemIds) {
-        AiTaskState state = new AiTaskState(UUID.randomUUID().toString(), scope, requestedCount, itemIds.size());
+    private AiOrganizeTaskView startTask(String scope, int requestedCount, ScheduledItems scheduled) {
+        AiTaskState state = new AiTaskState(
+                UUID.randomUUID().toString(),
+                scope,
+                requestedCount,
+                scheduled.itemIds().size(),
+                scheduled.skipped(),
+                scheduled.errors()
+        );
         tasks.put(state.id, state);
-        taskExecutor.submit(() -> runTask(state, itemIds));
+        taskExecutor.submit(() -> runTask(state, scheduled.itemIds()));
         return state.view();
     }
 
@@ -200,12 +216,17 @@ public class AiOrganizationService {
         saveSuggestions(itemId, result.suggestedTags(), timestamp);
     }
 
-    private void markProcessing(String itemId) {
-        jdbcTemplate.update("""
+    private boolean markProcessing(String itemId, boolean allowCompleted) {
+        String statuses = allowCompleted ? "'PENDING', 'FAILED', 'COMPLETED'" : "'PENDING', 'FAILED'";
+        return jdbcTemplate.update("""
                 UPDATE knowledge_items
                 SET ai_status = 'PROCESSING', ai_last_error = NULL, updated_at = ?
-                WHERE id = ? AND manual_metadata_locked = 0 AND ai_status IN ('PENDING', 'FAILED')
-                """, now(), itemId);
+                WHERE id = ?
+                  AND lifecycle_status = 'ACTIVE'
+                  AND trim(title) <> ''
+                  AND manual_metadata_locked = 0
+                  AND ai_status IN (%s)
+                """.formatted(statuses), now(), itemId) == 1;
     }
 
     private void markFailed(String itemId, Exception exception) {
@@ -222,16 +243,20 @@ public class AiOrganizationService {
         for (int start = 0; start < itemIds.size(); start += TASK_BATCH_SIZE) {
             for (String itemId : itemIds.subList(start, Math.min(start + TASK_BATCH_SIZE, itemIds.size()))) {
                 if (state.cancelRequested) return;
-                try {
-                    markProcessing(itemId);
-                    organizeNow(itemId);
-                    state.succeeded++;
-                } catch (Exception exception) {
-                    state.failed++;
-                    markFailed(itemId, exception);
-                    state.errors.add("%s: %s".formatted(itemId, safeAiError(exception)));
-                } finally {
-                    state.processed++;
+                if (!markProcessing(itemId, !SCOPE_ALL_PENDING.equals(state.scope))) {
+                    state.skipped++;
+                    state.errors.add("%s: 处理中或已被手动锁定".formatted(itemId));
+                } else {
+                    try {
+                        organizeNow(itemId);
+                        state.succeeded++;
+                    } catch (Exception exception) {
+                        state.failed++;
+                        markFailed(itemId, exception);
+                        state.errors.add("%s: %s".formatted(itemId, safeAiError(exception)));
+                    } finally {
+                        state.processed++;
+                    }
                 }
                 if (state.cancelRequested) return;
             }
@@ -251,23 +276,50 @@ public class AiOrganizationService {
                 .toList();
     }
 
-    private List<String> eligibleRequestedIds(List<String> requestedItemIds) {
+    private ScheduledItems scheduleSelectedItems(List<String> requestedItemIds) {
         List<String> ids = requestedIds(requestedItemIds);
-        if (ids.isEmpty()) return List.of();
+        if (ids.isEmpty()) return new ScheduledItems(List.of(), 0, List.of());
         String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
-        return jdbcTemplate.queryForList("""
-                SELECT id
+        List<RequestedItem> records = jdbcTemplate.query("""
+                SELECT id, lifecycle_status, title, manual_metadata_locked, ai_status
                 FROM knowledge_items
-                WHERE lifecycle_status = 'ACTIVE'
-                  AND trim(title) <> ''
-                  AND manual_metadata_locked = 0
-                  AND ai_status IN ('PENDING', 'FAILED')
-                  AND id IN (%s)
-                """.formatted(placeholders), String.class, ids.toArray());
+                WHERE id IN (%s)
+                """.formatted(placeholders), ids.toArray(), (resultSet, rowNum) -> new RequestedItem(
+                resultSet.getString("id"),
+                resultSet.getString("lifecycle_status"),
+                resultSet.getString("title"),
+                resultSet.getInt("manual_metadata_locked"),
+                resultSet.getString("ai_status")
+        ));
+        Map<String, RequestedItem> byId = new LinkedHashMap<>();
+        records.forEach(record -> byId.put(record.id(), record));
+        List<String> scheduled = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
+        for (String id : ids) {
+            RequestedItem record = byId.get(id);
+            if (record == null) {
+                errors.add(id + ": 记录不存在");
+            } else if (!"ACTIVE".equals(record.lifecycleStatus())) {
+                errors.add(id + ": 内容已删除");
+            } else if (!StringUtils.hasText(record.title())) {
+                errors.add(id + ": 标题为空");
+            } else if (record.manualMetadataLocked() != 0) {
+                errors.add(id + ": 已被手动锁定");
+            } else if (!Set.of("PENDING", "FAILED", "COMPLETED").contains(record.aiStatus())) {
+                errors.add(id + ": 正在处理中或状态不可重试");
+            } else {
+                scheduled.add(id);
+            }
+        }
+        return new ScheduledItems(scheduled, ids.size() - scheduled.size(), errors);
     }
 
     private AiOrganizeTaskView rejectedTask(String scope, int requestedCount, String message) {
-        return new AiOrganizeTaskView(null, "REJECTED", scope, requestedCount, 0, 0, 0, 0, List.of(), message);
+        return rejectedTask(scope, requestedCount, 0, message, List.of());
+    }
+
+    private AiOrganizeTaskView rejectedTask(String scope, int requestedCount, int skipped, String message, List<String> errors) {
+        return new AiOrganizeTaskView(null, "REJECTED", scope, requestedCount, 0, 0, 0, 0, skipped, errors, message);
     }
 
     private void validateResult(QwenAiResult result) {
@@ -429,23 +481,38 @@ public class AiOrganizationService {
         private volatile int processed;
         private volatile int succeeded;
         private volatile int failed;
+        private volatile int skipped;
         private volatile boolean cancelRequested;
         private volatile String message = "任务已创建";
 
-        private AiTaskState(String id, String scope, int requestedCount, int total) {
+        private AiTaskState(String id, String scope, int requestedCount, int total, int skipped, List<String> errors) {
             this.id = id;
             this.scope = scope;
             this.requestedCount = requestedCount;
             this.total = total;
+            this.skipped = skipped;
+            this.errors.addAll(errors);
         }
 
         private AiOrganizeTaskView view() {
-            return new AiOrganizeTaskView(id, status, scope, requestedCount, total, processed, succeeded, failed, List.copyOf(errors), message);
+            return new AiOrganizeTaskView(id, status, scope, requestedCount, total, processed, succeeded, failed, skipped, List.copyOf(errors), message);
         }
 
         private boolean terminal() {
             return List.of("COMPLETED", "COMPLETED_WITH_ERRORS", "REJECTED", "CANCELLED").contains(status);
         }
+    }
+
+    private record ScheduledItems(List<String> itemIds, int skipped, List<String> errors) {
+    }
+
+    private record RequestedItem(
+            String id,
+            String lifecycleStatus,
+            String title,
+            int manualMetadataLocked,
+            String aiStatus
+    ) {
     }
 
 }
