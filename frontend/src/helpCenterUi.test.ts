@@ -13,6 +13,12 @@ describe('帮助中心入口与首次引导', () => {
     expect(app).toContain('HelpCenterDialog')
   })
 
+  it('reloads once after a completed batch AI task', () => {
+    expect(app).toContain('finishAiTaskAndReload(task)')
+    expect(app).toContain('window.location.reload()')
+    expect(app).toContain("aiTask.value = null")
+  })
+
   it('复用同一个帮助内容并提供现有设置与分类入口', () => {
     expect(help).toContain('启动后端')
     expect(help).toContain('启动前端')

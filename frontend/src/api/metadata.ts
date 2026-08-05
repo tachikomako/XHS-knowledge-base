@@ -73,8 +73,10 @@ export function fetchTags(signal?: AbortSignal): Promise<Tag[]> {
   return requestJson('/api/v1/tags', { signal })
 }
 
-export function fetchUnifiedTags(signal?: AbortSignal): Promise<UnifiedTag[]> {
-  return requestJson('/api/v1/tags?view=unified', { signal })
+export function fetchUnifiedTags(query = '', signal?: AbortSignal): Promise<UnifiedTag[]> {
+  const params = new URLSearchParams({ view: 'unified' })
+  if (query.trim()) params.set('query', query.trim())
+  return requestJson(`/api/v1/tags?${params.toString()}`, { signal })
 }
 
 export function createTag(name: string): Promise<Tag> {

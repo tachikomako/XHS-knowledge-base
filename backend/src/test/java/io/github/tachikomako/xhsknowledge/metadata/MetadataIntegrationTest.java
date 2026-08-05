@@ -188,6 +188,25 @@ class MetadataIntegrationTest {
                 .andExpect(jsonPath("$.total").value(1));
     }
 
+    @Test
+    void searchesChineseTagsFromHistoricalContentWhenSourceTagsAreMissing() throws Exception {
+        String itemId = importItem("chinese-tag-batch", "chinesetag123");
+        jdbcTemplate.update("DELETE FROM knowledge_item_source_tags WHERE item_id = ?", itemId);
+        jdbcTemplate.update(
+                "UPDATE knowledge_items SET content = ?, content_status = 'COMPLETED' WHERE id = ?",
+                "训练 #体态 #体态改善 #核心训练",
+                itemId
+        );
+
+        mockMvc.perform(get("/api/v1/tags").param("view", "unified").param("query", "#体态"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("体态"))
+                .andExpect(jsonPath("$[1].name").value("体态改善"));
+        mockMvc.perform(get("/api/v1/items").param("tagName", "体态"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1));
+    }
+
     private String createCategory(String name, String parentId) throws Exception {
         var request = objectMapper.createObjectNode().put("name", name).put("sortOrder", 0);
         if (parentId == null) request.putNull("parentId"); else request.put("parentId", parentId);

@@ -14,12 +14,21 @@ import org.springframework.util.StringUtils;
 import java.text.Normalizer;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class MetadataService {
+
+    private static final Pattern CONTENT_TAG_PATTERN = Pattern.compile("#([\\p{L}\\p{N}_-]{1,50})");
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -66,41 +75,59 @@ public class MetadataService {
 
     public List<UnifiedTagView> listUnifiedTags(String query) {
         String normalizedQuery = normalizeTag(query);
-        return jdbcTemplate.query("""
-                SELECT normalized_name, MIN(display_name) AS display_name,
-                       COUNT(DISTINCT item_id) AS usage_count,
-                       MAX(CASE WHEN origin = 'SOURCE' THEN 1 ELSE 0 END) AS has_source,
-                       MAX(CASE WHEN origin = 'KNOWLEDGE' THEN 1 ELSE 0 END) AS has_knowledge
-                FROM (
-                    SELECT lower(trim(replace(value, '#', ''))) AS normalized_name,
-                           trim(replace(value, '#', '')) AS display_name,
-                           item_id, 'SOURCE' AS origin
-                    FROM knowledge_item_source_tags
-                    WHERE trim(replace(value, '#', '')) <> ''
-                    UNION ALL
-                    SELECT lower(trim(replace(name, '#', ''))) AS normalized_name,
-                           trim(replace(name, '#', '')) AS display_name,
-                           kit.item_id, 'KNOWLEDGE' AS origin
-                    FROM tags t
-                    JOIN knowledge_item_tags kit ON kit.tag_id = t.id
-                    WHERE trim(replace(name, '#', '')) <> ''
-                ) unified_tags
-                JOIN knowledge_items i ON i.id = unified_tags.item_id
+        Map<String, TagAccumulator> accumulators = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT i.id AS item_id, i.content,
+                       st.value AS source_value, t.name AS knowledge_name
+                FROM knowledge_items i
+                LEFT JOIN knowledge_item_source_tags st ON st.item_id = i.id
+                LEFT JOIN knowledge_item_tags kit ON kit.item_id = i.id
+                LEFT JOIN tags t ON t.id = kit.tag_id
                 WHERE i.lifecycle_status = 'ACTIVE'
-                  AND (? IS NULL OR normalized_name LIKE '%' || ? || '%')
-                GROUP BY normalized_name
-                ORDER BY usage_count DESC, lower(display_name)
-                LIMIT 100
-                """, (result, row) -> {
-            List<String> origins = new java.util.ArrayList<>();
-            if (result.getInt("has_source") == 1) origins.add("SOURCE");
-            if (result.getInt("has_knowledge") == 1) origins.add("KNOWLEDGE");
-            return new UnifiedTagView(
-                    result.getString("display_name"),
-                    result.getLong("usage_count"),
-                    origins
-            );
-        }, normalizedQuery, normalizedQuery);
+                """, result -> {
+            String itemId = result.getString("item_id");
+            addUnifiedTag(accumulators, result.getString("source_value"), itemId, "SOURCE");
+            addUnifiedTag(accumulators, result.getString("knowledge_name"), itemId, "KNOWLEDGE");
+            Matcher matcher = CONTENT_TAG_PATTERN.matcher(result.getString("content") == null ? "" : result.getString("content"));
+            while (matcher.find()) addUnifiedTag(accumulators, matcher.group(1), itemId, "SOURCE");
+        });
+        return accumulators.values().stream()
+                .filter(tag -> normalizedQuery == null || tag.normalizedName.contains(normalizedQuery))
+                .sorted((left, right) -> {
+                    int count = Integer.compare(right.itemIds.size(), left.itemIds.size());
+                    return count != 0 ? count : left.displayName.compareToIgnoreCase(right.displayName);
+                })
+                .limit(100)
+                .map(tag -> new UnifiedTagView(tag.displayName, tag.itemIds.size(), orderedOrigins(tag.origins)))
+                .toList();
+    }
+
+    private List<String> orderedOrigins(Set<String> origins) {
+        List<String> ordered = new ArrayList<>();
+        if (origins.contains("SOURCE")) ordered.add("SOURCE");
+        if (origins.contains("KNOWLEDGE")) ordered.add("KNOWLEDGE");
+        return ordered;
+    }
+
+    private void addUnifiedTag(Map<String, TagAccumulator> tags, String rawName, String itemId, String origin) {
+        String displayName = rawName == null ? null : rawName.replaceFirst("^#+", "").trim();
+        if (!StringUtils.hasText(displayName)) return;
+        String normalizedName = displayName.toLowerCase(Locale.ROOT);
+        TagAccumulator tag = tags.computeIfAbsent(normalizedName, ignored -> new TagAccumulator(normalizedName, displayName));
+        tag.itemIds.add(itemId);
+        tag.origins.add(origin);
+    }
+
+    private static final class TagAccumulator {
+        private final String normalizedName;
+        private final String displayName;
+        private final Set<String> itemIds = new HashSet<>();
+        private final Set<String> origins = new java.util.TreeSet<>();
+
+        private TagAccumulator(String normalizedName, String displayName) {
+            this.normalizedName = normalizedName;
+            this.displayName = displayName;
+        }
     }
 
     public List<SourceTagView> listSourceTags() {

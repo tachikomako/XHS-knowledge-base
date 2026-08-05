@@ -91,7 +91,8 @@ public class KnowledgeItemService {
                                AND lower(trim(replace(t.name, '#', ''))) = {0})
                      OR EXISTS (SELECT 1 FROM knowledge_item_source_tags kist
                                 WHERE kist.item_id = knowledge_items.id
-                                  AND lower(trim(replace(kist.value, '#', ''))) = {0}))
+                                  AND lower(trim(replace(kist.value, '#', ''))) = {0})
+                     OR instr(lower(coalesce(knowledge_items.content, '')), lower('#' || {0})) > 0)
                     """, normalizedTagName);
         }
         wrapper.eq(StringUtils.hasText(sourceType), KnowledgeItemEntity::getSourceType, sourceType);

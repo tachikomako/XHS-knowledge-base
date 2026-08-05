@@ -49,6 +49,7 @@ const categories = ref<Category[]>([])
 const tags = ref<Tag[]>([])
 const unifiedTags = ref<UnifiedTag[]>([])
 const unifiedTagsLoading = ref(false)
+const tagSearchQuery = ref('')
 const sourceTags = ref<SourceTag[]>([])
 const categorySuggestions = ref<CategorySuggestion[]>([])
 const taxonomyVisible = ref(false)
@@ -72,6 +73,8 @@ let metadataController: AbortController | null = null
 let settingsController: AbortController | null = null
 let aiPollController: AbortController | null = null
 let aiPollTimer: number | null = null
+let tagSearchController: AbortController | null = null
+let tagSearchTimer: number | null = null
 
 const tagNames = computed(() => Object.fromEntries(tags.value.map((tag) => [tag.id, tag.name])))
 const orderedTags = computed(() => [...unifiedTags.value].sort((left, right) => (
@@ -119,7 +122,9 @@ onBeforeUnmount(() => {
   metadataController?.abort()
   settingsController?.abort()
   aiPollController?.abort()
+  tagSearchController?.abort()
   if (aiPollTimer !== null) window.clearTimeout(aiPollTimer)
+  if (tagSearchTimer !== null) window.clearTimeout(tagSearchTimer)
 })
 
 watch([categoryId, tagName], () => {
@@ -173,18 +178,29 @@ async function loadMetadata() {
   }
 }
 
-async function loadUnifiedTags() {
+async function loadUnifiedTags(query = '') {
+  tagSearchController?.abort()
+  const controller = new AbortController()
+  tagSearchController = controller
   unifiedTagsLoading.value = true
   try {
-    unifiedTags.value = await fetchUnifiedTags()
+    unifiedTags.value = await fetchUnifiedTags(query, controller.signal)
   } catch (error) {
     unifiedTags.value = []
     if (!(error instanceof DOMException && error.name === 'AbortError')) {
       ElMessage.warning('标签筛选暂时不可用')
     }
   } finally {
-    unifiedTagsLoading.value = false
+    if (tagSearchController === controller) unifiedTagsLoading.value = false
   }
+}
+
+function searchUnifiedTags(query: string) {
+  tagSearchQuery.value = query
+  if (tagSearchTimer !== null) window.clearTimeout(tagSearchTimer)
+  tagSearchTimer = window.setTimeout(() => {
+    void loadUnifiedTags(query)
+  }, 250)
 }
 
 async function loadSettings() {
@@ -374,6 +390,10 @@ function pollAiTask(id: string) {
       const task = await getAiTask(id, controller.signal)
       aiTask.value = task
       if (['COMPLETED', 'COMPLETED_WITH_ERRORS', 'REJECTED', 'CANCELLED'].includes(task.status)) {
+        if (['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(task.status)) {
+          finishAiTaskAndReload(task)
+          return
+        }
         activeAiAction.value = null
         selectedIds.value = []
         await Promise.all([loadItems(), loadMetadata(), loadSettings()])
@@ -390,6 +410,18 @@ function pollAiTask(id: string) {
       if (aiPollController === controller) aiPollController = null
     }
   }, 1200)
+}
+
+function finishAiTaskAndReload(task: AiOrganizeTask) {
+  if (aiPollTimer !== null) window.clearTimeout(aiPollTimer)
+  aiPollTimer = null
+  aiPollController?.abort()
+  aiPollController = null
+  activeAiAction.value = null
+  selectedIds.value = []
+  aiTask.value = null
+  ElMessage[task.failed > 0 ? 'warning' : 'success'](task.message || 'AI 分类完成')
+  window.location.reload()
 }
 
 function toggleSelect(item: KnowledgeItem) {
@@ -651,8 +683,8 @@ function replaceItem(updated: KnowledgeItem) {
 
     <section class="toolbar" aria-label="知识库筛选">
       <form class="search-form" @submit.prevent="applySearch">
-        <el-select v-model="tagName" clearable filterable :loading="unifiedTagsLoading" size="large" placeholder="全部标签" no-data-text="暂无标签" no-match-text="没有匹配的标签" aria-label="标签筛选">
-          <el-option v-for="tag in orderedTags" :key="tag.name" :label="`#${tag.name}`" :value="tag.name" />
+        <el-select v-model="tagName" clearable filterable remote :remote-method="searchUnifiedTags" :loading="unifiedTagsLoading" size="large" placeholder="全部标签" no-data-text="暂无标签" no-match-text="没有匹配的标签" aria-label="标签筛选">
+          <el-option v-for="tag in orderedTags" :key="tag.name" :label="tag.name" :value="tag.name" />
         </el-select>
         <el-input v-model="queryInput" size="large" clearable placeholder="搜索标题、正文、摘要或笔记" :prefix-icon="Search" @clear="clearSearch" />
         <el-button native-type="submit" size="large" type="primary">搜索</el-button>
