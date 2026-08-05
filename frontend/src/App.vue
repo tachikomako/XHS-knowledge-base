@@ -641,7 +641,7 @@ function replaceItem(updated: KnowledgeItem) {
     <header class="site-header">
       <div class="brand">
         <div class="brand-mark"><Collection /></div>
-        <div><strong>拾笺</strong><span>XHS KNOWLEDGE</span></div>
+        <div><strong>拾叶</strong><span>XHS KNOWLEDGE</span></div>
       </div>
       <div class="header-actions">
         <button class="health-pill" :class="{ online: health }" type="button" @click="checkHealth">
