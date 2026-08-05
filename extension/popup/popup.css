@@ -149,6 +149,11 @@ h2 {
   background: #e8eee4;
 }
 
+.stop-button {
+  color: #8f4338;
+  background: #f4e2de;
+}
+
 .capture-result.success {
   color: #527047;
 }
