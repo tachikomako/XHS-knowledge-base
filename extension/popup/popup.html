@@ -57,6 +57,16 @@
       </details>
 
       <button type="button" class="secondary" id="openKnowledgeBase">打开知识库</button>
+      <button type="button" class="guide-button" id="openBeginnerGuide">新手提示</button>
+
+      <dialog id="beginnerGuideDialog" class="beginner-guide-dialog">
+        <form method="dialog" class="guide-dialog-header">
+          <div><span class="eyebrow">SHIYE BEGINNER GUIDE</span><h2>新手提示</h2></div>
+          <button type="submit" class="icon-button" aria-label="关闭新手提示">×</button>
+        </form>
+        <div id="beginnerGuideContent" class="beginner-guide-content"></div>
+        <form method="dialog" class="guide-dialog-footer"><button type="submit" class="primary">我知道了</button></form>
+      </dialog>
 
       <details>
         <summary>连接设置</summary>
